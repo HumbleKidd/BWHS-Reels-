@@ -80,6 +80,12 @@ header.top > * { pointer-events:auto; }
 .slide { height:100dvh; scroll-snap-align:start; position:relative; overflow:hidden; }
 .slide img.bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scale(1.06); }
 .slide.active img.bg { animation: ken 22s linear alternate infinite; }
+.trailer-cover { position:absolute; inset:0; overflow:hidden; background:#000; }
+.trailer-cover iframe {
+  position:absolute; top:50%; left:50%; border:0;
+  height:100%; width:177.78%; min-width:100%; min-height:56.25vw;
+  transform:translate(-50%,-50%); pointer-events:none;
+}
 @keyframes ken { from{transform:scale(1.06)} to{transform:scale(1.16)} }
 .veil { position:absolute; inset:0; background:
   linear-gradient(to top, color-mix(in oklab, var(--bg) 92%, transparent) 0%, transparent 42%),
@@ -152,6 +158,7 @@ header.top > * { pointer-events:auto; }
 .player iframe { flex:1; width:100%; border:0; background:#000; }
 .player-bar { display:flex; align-items:center; gap:10px; padding: max(8px, env(safe-area-inset-top)) 12px 10px; background:#000; }
 .player-bar strong { flex:1; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.player:fullscreen, .player:-webkit-full-screen { width:100vw; height:100vh; }
 
 .panel { position:absolute; inset:0; z-index:42; background:var(--bg); display:flex; flex-direction:column; }
 .themes { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -192,8 +199,10 @@ header.top > * { pointer-events:auto; }
 const TMDB = "https://api.themoviedb.org/3";
 const KEY = "129637a8869a61522af21b80f6eb5129";
 const IMG = {
-  poster: "https://image.tmdb.org/t/p/w342",
+  poster: "https://image.tmdb.org/t/p/w500",
+  posterThumb: "https://image.tmdb.org/t/p/w342",
   backdrop: "https://image.tmdb.org/t/p/w780",
+  backdropHd: "https://image.tmdb.org/t/p/w1280",
   profile: "https://image.tmdb.org/t/p/w185",
   logo: "https://image.tmdb.org/t/p/w185",
 };
@@ -270,21 +279,48 @@ function mapItem(it, type) {
   };
 }
 function pickTrailer(videos) {
-  const list = (videos||[]).filter(v => v.site==="YouTube");
-  return (list.find(v=>v.type==="Trailer" && v.official) || list.find(v=>v.type==="Trailer") || list[0] || {}).key || null;
+  const list = (videos||[]).filter(v => v.site==="YouTube" && v.key);
+  const rank = t => t==="Trailer"?0 : t==="Teaser"?1 : t==="Clip"?2 : 3;
+  list.sort((a,b)=> (a.official===b.official?0:a.official?-1:1) || rank(a.type)-rank(b.type));
+  return (list[0]||{}).key || null;
+}
+function ytEmbed(key, muted){
+  const p = new URLSearchParams({
+    autoplay:"1", mute: muted?"1":"0", controls:"0", rel:"0", modestbranding:"1",
+    playsinline:"1", enablejsapi:"1", loop:"1", playlist:key, fs:"0",
+    iv_load_policy:"3", disablekb:"1", origin: location.origin
+  });
+  return `https://www.youtube-nocookie.com/embed/${key}?${p}`;
+}
+async function findTrailerKey(mediaType, id){
+  const base = mediaType==="tv" ? `/tv/${id}` : `/movie/${id}`;
+  const tries = [
+    tmdb(base+"/videos", { language:"en-US" }),
+    tmdb(base+"/videos"),
+  ];
+  for (const job of tries) {
+    try {
+      const d = await job;
+      const key = pickTrailer(d.results);
+      if (key) return key;
+    } catch {}
+  }
+  return null;
 }
 async function hydrate(reel) {
-  if (reel.hydrated) return reel;
+  if (reel.hydrated && reel.trailerKey) return reel;
   const path = reel.mediaType==="tv" ? `/tv/${reel.id}` : `/movie/${reel.id}`;
   const d = await tmdb(path, { append_to_response: "videos,credits" });
   const companies = d.production_companies || [];
   const networks = d.networks || [];
   const studioSrc = reel.mediaType==="tv" ? (networks[0]||companies[0]) : companies[0];
+  let trailerKey = pickTrailer(d.videos && d.videos.results);
+  if (!trailerKey) trailerKey = await findTrailerKey(reel.mediaType, reel.id);
   return {
     ...reel,
     overview: d.overview || reel.overview,
     runtime: d.runtime || (d.episode_run_time||[])[0] || reel.runtime,
-    trailerKey: pickTrailer(d.videos && d.videos.results),
+    trailerKey,
     studio: studioSrc ? { id: studioSrc.id, name: studioSrc.name, logoPath: studioSrc.logo_path||null, kind: networks[0]&&studioSrc===networks[0]?"network":"company" } : null,
     cast: ((d.credits&&d.credits.cast)||[]).slice(0,8).map(c=>({id:c.id,name:c.name,character:c.character||"",profilePath:c.profile_path||null})),
     hydrated: true,
@@ -408,6 +444,7 @@ function icon(name){
     sliders:'<path d="M4 7h16M4 17h16M10 4v6M14 14v6"/>',
     bookmark:'<path d="M7 4h10v16l-5-3-5 3z"/>',
     clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/>',
+    expand:'<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>',
   };
   return `<svg viewBox="0 0 24 24" ${Object.entries(p).map(([k,v])=>`${k}="${v}"`).join(" ")}>${paths[name]||""}</svg>`;
 }
@@ -448,10 +485,14 @@ function headerHTML(){
 function bootHTML(){ return `<div class="boot"><div><div class="logo">BWHS</div><div class="spin"></div></div></div>`; }
 function emptyLane(){ return `<div class="boot"><p class="empty">Nothing here yet. Save titles or watch something.</p></div>`; }
 function slideHTML(r,i){
-  const bg = r.backdropPath ? IMG.backdrop+r.backdropPath : (r.posterPath?IMG.poster+r.posterPath:"");
+  const hd = i===state.active;
+  const bg = r.backdropPath
+    ? (hd ? IMG.backdropHd : IMG.backdrop)+r.backdropPath
+    : (r.posterPath?IMG.poster+r.posterPath:"");
   const saved = isSaved(r);
-  return `<article class="slide ${i===state.active?"active":""}" data-i="${i}">
-    ${bg?`<img class="bg" src="${bg}" alt="" loading="${i<2?"eager":"lazy"}">`:""}
+  return `<article class="slide ${hd?"active":""}" data-i="${i}">
+    ${bg?`<img class="bg" src="${bg}" alt="" loading="${i<3?"eager":"lazy"}">`:""}
+    <div class="trailer-slot"></div>
     <div class="veil"></div>
     <div class="meta">
       <div class="kicker">${r.mediaType==="tv"?"Series":"Film"} ${r.year? "· "+r.year:""} ${r.rating? "· "+r.rating.toFixed(1):""}</div>
@@ -498,7 +539,7 @@ function searchHTML(){
 }
 function rowHTML(t){
   return `<button class="row" data-open-title='${escAttr(JSON.stringify(t))}'>
-    ${t.posterPath?`<img src="${IMG.poster+t.posterPath}" alt="">`:`<span class="ph"></span>`}
+    ${t.posterPath?`<img src="${IMG.posterThumb+t.posterPath}" alt="" loading="lazy">`:`<span class="ph"></span>`}
     <span><b>${esc(t.title)}</b><br><small>${t.mediaType==="tv"?"TV":"Movie"}${t.year?" · "+t.year:""}</small></span>
   </button>`;
 }
@@ -573,8 +614,12 @@ function catalogHTML(){
 }
 function playerHTML(r){
   const src = r.mediaType==="tv" ? VIX.tv(r.id) : VIX.movie(r.id);
-  return `<div class="player">
-    <div class="player-bar"><button class="icon-btn" id="closePlayer">${icon("x")}</button><strong>${esc(r.title)}</strong></div>
+  return `<div class="player" id="cinema">
+    <div class="player-bar">
+      <button class="icon-btn" id="closePlayer">${icon("x")}</button>
+      <strong>${esc(r.title)}</strong>
+      <button class="icon-btn" id="fsPlayer" aria-label="Fullscreen">${icon("expand")}</button>
+    </div>
     <iframe src="${src}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe>
   </div>`;
 }
@@ -582,17 +627,81 @@ function playerHTML(r){
 function esc(s){ return String(s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 function escAttr(s){ return esc(s); }
 
+function isPhone(){
+  return window.matchMedia("(max-width: 820px)").matches ||
+    (window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 1100);
+}
+function ytCommand(func){
+  document.querySelectorAll(".trailer-cover iframe").forEach(f=>{
+    try { f.contentWindow?.postMessage(JSON.stringify({event:"command",func,args:[]}),"*"); } catch {}
+  });
+}
+function syncTrailers(){
+  document.querySelectorAll(".slide").forEach(slide=>{
+    const i = +slide.dataset.i;
+    const r = state.items[i];
+    const slot = slide.querySelector(".trailer-slot");
+    if (!slot || !r) return;
+    const active = i===state.active && !state.watching && state.overlay==="none";
+    const existing = slot.querySelector("iframe");
+    if (active && r.trailerKey) {
+      if (!existing || existing.dataset.key!==r.trailerKey) {
+        slot.innerHTML = `<div class="trailer-cover"><iframe data-key="${r.trailerKey}" src="${ytEmbed(r.trailerKey, store.muted)}" allow="autoplay; encrypted-media; picture-in-picture" title="trailer"></iframe></div>`;
+      } else {
+        ytCommand("playVideo");
+        ytCommand(store.muted?"mute":"unMute");
+      }
+      const img = slide.querySelector("img.bg");
+      if (img && r.backdropPath && !img.src.includes("w1280")) img.src = IMG.backdropHd + r.backdropPath;
+    } else if (existing) {
+      slot.innerHTML = "";
+    }
+  });
+}
+async function enterLandscape(node){
+  try { await (node.requestFullscreen || node.webkitRequestFullscreen)?.call(node); } catch {}
+  try { await screen.orientation?.lock?.("landscape"); } catch {}
+}
+async function exitCinemaFs(){
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+  try { screen.orientation?.unlock?.(); } catch {}
+}
+function toggleCinemaFs(){
+  const el = document.getElementById("cinema");
+  if (!el) return;
+  if (document.fullscreenElement) exitCinemaFs();
+  else enterLandscape(el);
+}
+
 function bind(){
   $("#autofs")?.addEventListener("click", ()=>{ store.autoFs=!store.autoFs; persistPrefs(); render(); });
   $("#searchBtn")?.addEventListener("click", ()=>{ state.overlay="search"; render(); $("#q")?.focus(); });
   $("#setBtn")?.addEventListener("click", ()=>{ state.overlay="settings"; render(); });
   $("#libBtn")?.addEventListener("click", ()=>{ state.overlay="library"; state.libTab="saved"; render(); });
   $("#closeOv")?.addEventListener("click", ()=>{ state.overlay="none"; render(); });
-  $("#closePlayer")?.addEventListener("click", ()=>{ state.watching=null; if(document.fullscreenElement) document.exitFullscreen?.(); render(); });
+  $("#closePlayer")?.addEventListener("click", ()=>{
+    state.watching=null;
+    exitCinemaFs();
+    render();
+    requestAnimationFrame(()=>syncTrailers());
+  });
+  $("#fsPlayer")?.addEventListener("click", ()=>toggleCinemaFs());
   document.querySelectorAll("[data-lane]").forEach(b=>b.addEventListener("click", ()=>loadLane(b.dataset.lane)));
   document.querySelectorAll("[data-watch]").forEach(b=>b.addEventListener("click", ()=>openWatch(state.items[+b.dataset.watch])));
-  document.querySelectorAll("[data-save]").forEach(b=>b.addEventListener("click", ()=>{ toggleSaved(state.items[+b.dataset.save]); render(); restoreScroll(); }));
-  document.querySelectorAll("[data-mute]").forEach(b=>b.addEventListener("click", ()=>{ store.muted=!store.muted; persistPrefs(); render(); restoreScroll(); }));
+  document.querySelectorAll("[data-save]").forEach(b=>b.addEventListener("click", ()=>{
+    toggleSaved(state.items[+b.dataset.save]);
+    const r=state.items[+b.dataset.save];
+    b.classList.toggle("saved", isSaved(r));
+    b.querySelector("span").textContent = isSaved(r)?"Saved":"Save";
+  }));
+  document.querySelectorAll("[data-mute]").forEach(b=>b.addEventListener("click", ()=>{
+    store.muted=!store.muted; persistPrefs();
+    document.querySelectorAll("[data-mute]").forEach(btn=>{
+      btn.querySelector("i").innerHTML = store.muted?icon("mute"):icon("vol");
+      btn.querySelector("span").textContent = store.muted?"Muted":"Sound";
+    });
+    ytCommand(store.muted?"mute":"unMute");
+  }));
   document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click", ()=>{ state.synopsis=state.items[+b.dataset.open]; state.overlay="synopsis"; render(); }));
   document.querySelectorAll("[data-open-title]").forEach(b=>b.addEventListener("click", ()=>{
     const reel = JSON.parse(b.getAttribute("data-open-title"));
@@ -639,6 +748,7 @@ function bind(){
     feed.addEventListener("scroll", onScroll, {passive:true});
     if (state.restoreY) feed.scrollTop = state.restoreY;
   }
+  requestAnimationFrame(()=>syncTrailers());
 }
 
 function restoreScroll(){
@@ -652,25 +762,42 @@ function onScroll(e){
   if (i!==state.active && state.items[i]) {
     state.active=i;
     document.querySelectorAll(".slide").forEach((s,idx)=>s.classList.toggle("active", idx===i));
+    syncTrailers();
     hydrateAround(i);
     if (i > state.items.length-4) loadMore();
   }
 }
 
 async function hydrateAround(i){
-  const slice = state.items.slice(Math.max(0,i-1), i+4);
+  const start = Math.max(0,i-1);
+  const slice = state.items.slice(start, i+4);
   await Promise.all(slice.map(async (item, idx)=>{
-    const real = state.items[Math.max(0,i-1)+idx];
-    if (!real || real.hydrated) return;
+    const pos = start+idx;
+    const real = state.items[pos];
+    if (!real || (real.hydrated && real.trailerKey)) return;
     try {
       const next = await hydrate(real);
-      const pos = state.items.findIndex(x=>x.id===next.id && x.mediaType===next.mediaType);
-      if (pos>=0) state.items[pos]=next;
-    } catch { real.hydrated=true; }
+      state.items[pos]=next;
+      const slide = document.querySelector(`.slide[data-i="${pos}"]`);
+      if (slide && next.cast?.length) {
+        const row = slide.querySelector(".cast-row");
+        if (row) row.innerHTML = next.cast.slice(0,6).map(p=>`<button class="cast" data-person='${escAttr(JSON.stringify(p))}'>
+          ${p.profilePath?`<img src="${IMG.profile+p.profilePath}" alt="">`:`<span class="ph">${esc(p.name[0]||"?")}</span>`}
+          <span>${esc(p.name)}</span>
+        </button>`).join("");
+        row.querySelectorAll("[data-person]").forEach(b=>b.addEventListener("click", ()=>openPerson(JSON.parse(b.getAttribute("data-person")))));
+      }
+      if (slide && next.studio) {
+        const st = slide.querySelector(".studio");
+        if (st) {
+          st.disabled = false;
+          st.setAttribute("data-studio", JSON.stringify(next.studio));
+          st.querySelector("small").textContent = next.studio.name;
+        }
+      }
+    } catch { if (real) real.hydrated=true; }
   }));
-  const feed=$("#feed"); const y=feed?feed.scrollTop:0;
-  render();
-  const f2=$("#feed"); if(f2) f2.scrollTop=y;
+  syncTrailers();
 }
 
 async function loadLane(id){
@@ -719,7 +846,10 @@ function openWatch(reel){
   addHistory(reel);
   state.watching=reel; state.overlay="none";
   render();
-  if (store.autoFs) document.documentElement.requestFullscreen?.().catch(()=>{});
+  const cinema = document.getElementById("cinema");
+  if (isPhone()) {
+    if (cinema) enterLandscape(cinema);
+  }
 }
 
 async function openPerson(p){
