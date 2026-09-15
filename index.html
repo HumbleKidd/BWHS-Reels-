@@ -128,25 +128,31 @@ header.top > * { pointer-events:auto; }
 .spin { width:18px; height:18px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; margin:12px auto 0; }
 @keyframes spin { to { transform:rotate(360deg) } }
 
-.overlay { position:absolute; inset:0; z-index:40; background:var(--bg); display:flex; flex-direction:column; }
-.ov-head { display:flex; align-items:center; gap:8px; padding: max(.7rem, env(safe-area-inset-top)) 12px 12px; }
+.overlay { position:absolute; inset:0; z-index:40; background:var(--bg); display:flex; flex-direction:column; min-height:0; }
+.ov-head { display:flex; align-items:center; gap:8px; padding: max(.7rem, env(safe-area-inset-top)) 12px 10px; }
 .ov-head h3 { margin:0; font-size:16px; font-weight:700; }
+.cat-sticky {
+  position:sticky; top:0; z-index:6;
+  background: color-mix(in oklab, var(--bg) 94%, transparent);
+  backdrop-filter: blur(16px);
+  border-bottom:1px solid var(--line);
+}
 .search-wrap { position:relative; flex:1; }
 .search-wrap svg { position:absolute; left:14px; top:50%; transform:translateY(-50%); opacity:.55; }
 .search-wrap input {
   width:100%; height:44px; border-radius:999px; border:1px solid var(--line); background:var(--surface);
   color:var(--fg); padding:0 14px 0 40px; outline:none;
 }
-.ov-body { flex:1; overflow:auto; padding: 4px 16px 32px; }
+.ov-body { flex:1; overflow:auto; padding: 8px 12px 32px; min-height:0; }
 .sec { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:600; margin:16px 0 8px; }
 .row { display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:8px; border-radius:16px; }
 .row:hover { background: color-mix(in oklab, var(--elevated) 60%, transparent); }
 .row img, .row .ph { width:48px; height:72px; border-radius:8px; object-fit:cover; background:var(--elevated); flex:none; }
 .chip { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:var(--surface); margin:0 6px 8px 0; font-size:13px; }
 .people { display:flex; gap:10px; overflow-x:auto; scrollbar-width:none; }
-.grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
-.card { text-align:left; position:relative; }
-.card img { width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:12px; background:var(--elevated); }
+.grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:8px; }
+.card { text-align:left; position:relative; min-width:0; }
+.card img { width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:10px; background:var(--elevated); }
 .card b { display:block; margin-top:6px; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .card small { color:var(--muted); font-size:11px; }
 .card .heart {
@@ -161,8 +167,8 @@ header.top > * { pointer-events:auto; }
   backdrop-filter: blur(12px); font-size:13px; line-height:1.4;
 }
 .tip kbd { font-size:11px; border:1px solid var(--line); border-radius:6px; padding:1px 6px; }
-.cat-hero { display:flex; gap:16px; align-items:center; padding: 0 4px 16px; }
-.cat-hero img, .cat-hero .ph { width:72px; height:72px; border-radius:18px; object-fit:cover; background:var(--elevated); }
+.cat-hero { display:flex; gap:12px; align-items:center; padding: 0 16px 10px; }
+.cat-hero img, .cat-hero .ph { width:44px; height:44px; border-radius:12px; object-fit:cover; background:var(--elevated); flex:none; }
 
 .sheet {
   position:absolute; left:0; right:0; bottom:0; z-index:45;
@@ -238,8 +244,9 @@ header.top > * { pointer-events:auto; }
   .rail { right:22px; bottom:28px; }
   .player { background:#050506; }
   .player iframe { margin: 0 auto; width: min(1280px, 100%); }
-  .grid { grid-template-columns: repeat(6, 1fr); gap:14px; }
-  .ov-body { padding: 8px 28px 48px; }
+  .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap:14px; }
+  .ov-body { padding: 12px 28px 48px; }
+  .cat-hero { padding-left:28px; padding-right:28px; }
 }
 </style>
 </head>
@@ -384,62 +391,76 @@ async function hydrate(reel) {
     hydrated: true,
   };
 }
-const SORTS = ["popularity.desc","vote_count.desc","primary_release_date.desc","revenue.desc","vote_average.desc"];
 const lanePool = {};
 function shuffle(arr){
   const a=arr.slice();
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
-function nextDiscoverPage(lane){
-  if (!lanePool[lane]) lanePool[lane] = { used:new Set(), max:500 };
+function nextHotPage(lane, max=8){
+  if (!lanePool[lane]) lanePool[lane] = { used:new Set() };
   const pool = lanePool[lane];
   let guard=0;
-  while (guard++<40){
-    const p = 1 + Math.floor(Math.random()*pool.max);
+  while (guard++<20){
+    const p = 1 + Math.floor(Math.random()*max);
     if (!pool.used.has(p)) { pool.used.add(p); return p; }
   }
   pool.used.clear();
-  const p = 1 + Math.floor(Math.random()*pool.max);
+  const p = 1 + Math.floor(Math.random()*max);
   pool.used.add(p);
   return p;
+}
+function knownTitle(r){
+  if (!r.posterPath && !r.backdropPath) return false;
+  if (r.voteCount && r.voteCount < 80) return false;
+  const y = parseInt(r.year,10);
+  if (y && y < 1995 && r.voteCount < 1500) return false;
+  return true;
 }
 async function fetchLane(lane) {
   if (lane==="saved") return store.saved.slice();
   if (lane==="history") return store.history.slice();
-  const page = nextDiscoverPage(lane);
-  const sort = SORTS[Math.floor(Math.random()*SORTS.length)];
-  const year = 1970 + Math.floor(Math.random()*57);
+  const page = nextHotPage(lane, lane==="foryou"?5:10);
   let rows = [];
   try {
     if (lane==="movies") {
-      const data = await tmdb("/discover/movie", { page, sort_by:sort, include_adult:"false" });
+      const src = Math.random();
+      const path = src<.4 ? "/movie/popular" : src<.7 ? "/movie/now_playing" : "/movie/top_rated";
+      const data = await tmdb(path, { page });
       rows = (data.results||[]).map(x=>mapItem(x,"movie"));
     } else if (lane==="shows") {
-      const data = await tmdb("/discover/tv", { page, sort_by:sort==="revenue.desc"?"popularity.desc":sort, without_genres:"10763,10764,10767,10766" });
+      const path = Math.random()<.6 ? "/tv/popular" : "/tv/top_rated";
+      const data = await tmdb(path, { page });
       rows = (data.results||[]).map(x=>mapItem(x,"tv"));
     } else if (lane==="animation") {
-      const which = Math.random()>.45 ? "movie" : "tv";
-      const data = await tmdb(`/discover/${which}`, { page, with_genres:16, sort_by:sort==="revenue.desc"?"popularity.desc":sort });
+      const which = Math.random()>.4 ? "movie" : "tv";
+      const data = await tmdb(`/discover/${which}`, { page, with_genres:16, sort_by:"popularity.desc", "vote_count.gte":200, "primary_release_date.gte": which==="movie"?"1998-01-01":undefined });
       rows = (data.results||[]).map(x=>mapItem(x,which));
     } else if (lane==="action") {
-      const data = await tmdb("/discover/movie", { page, with_genres:28, sort_by:sort });
+      const data = await tmdb("/discover/movie", { page, with_genres:28, sort_by:"popularity.desc", "vote_count.gte":400, "primary_release_date.gte":"2005-01-01" });
       rows = (data.results||[]).map(x=>mapItem(x,"movie"));
     } else if (lane==="comedy") {
-      const which = Math.random()>.5 ? "movie" : "tv";
-      const data = await tmdb(`/discover/${which}`, { page, with_genres:35, sort_by:sort==="revenue.desc"?"popularity.desc":sort });
+      const which = Math.random()>.45 ? "movie" : "tv";
+      const data = await tmdb(`/discover/${which}`, { page, with_genres:35, sort_by:"popularity.desc", "vote_count.gte":250 });
       rows = (data.results||[]).map(x=>mapItem(x,which));
     } else if (lane==="horror") {
-      const data = await tmdb("/discover/movie", { page, with_genres:27, sort_by:sort });
+      const data = await tmdb("/discover/movie", { page, with_genres:27, sort_by:"popularity.desc", "vote_count.gte":300, "primary_release_date.gte":"2004-01-01" });
       rows = (data.results||[]).map(x=>mapItem(x,"movie"));
     } else {
-      const which = Math.random()>.5 ? "movie" : "tv";
-      const extra = Math.random()>.6 ? { "primary_release_date.gte": `${year}-01-01` } : {};
-      const data = await tmdb(`/discover/${which}`, { page, sort_by:sort==="revenue.desc" && which==="tv"?"popularity.desc":sort, ...extra, without_genres: which==="tv"?"10763,10764,10767,10766":undefined });
-      rows = (data.results||[]).map(x=>mapItem(x,which));
+      const pick = Math.random();
+      if (pick < .45) {
+        const data = await tmdb("/trending/all/day", { page: Math.min(page,3) });
+        rows = (data.results||[]).filter(x=>x.media_type==="movie"||x.media_type==="tv").map(x=>mapItem(x,x.media_type));
+      } else if (pick < .75) {
+        const data = await tmdb("/trending/all/week", { page: Math.min(page,4) });
+        rows = (data.results||[]).filter(x=>x.media_type==="movie"||x.media_type==="tv").map(x=>mapItem(x,x.media_type));
+      } else {
+        const data = await tmdb("/movie/popular", { page });
+        rows = (data.results||[]).map(x=>mapItem(x,"movie"));
+      }
     }
   } catch { rows = []; }
-  return shuffle(rows.filter(x => !x.adult && (x.posterPath||x.backdropPath||x.overview)));
+  return shuffle(rows.filter(knownTitle));
 }
 
 function loadJSON(k, fallback) {
@@ -731,14 +752,14 @@ function catalogHTML(){
   const filter = c.filter || "all";
   const items = (c.items||[]).filter(t => filter==="all" || t.mediaType===filter);
   return `<section class="overlay">
-    <header class="ov-head"><button class="icon-btn" id="closeOv">${icon("back")}</button><h3>${esc(c.title)}</h3></header>
-    <div class="ov-body" id="catBody">
+    <div class="cat-sticky">
+      <header class="ov-head"><button class="icon-btn" id="closeOv">${icon("back")}</button><h3>${esc(c.title)}</h3></header>
       <div class="cat-hero">
         ${c.image?`<img src="${c.image}" alt="">`:`<span class="ph">${esc((c.title||"B")[0])}</span>`}
         <div>
           <div class="kicker">${c.mode==="person"?"Filmography":"Studio / Network"}</div>
           <strong>${esc(c.title)}</strong>
-          <div class="empty" style="padding:6px 0 0">${items.length} titles${c.more?" and counting":""}</div>
+          <div class="empty" style="padding:4px 0 0">${items.length} titles${c.more?" · loading more":""}</div>
         </div>
       </div>
       <div class="tabs-lib">
@@ -746,6 +767,8 @@ function catalogHTML(){
         <button class="lane ${filter==="movie"?"on":""}" data-catfilter="movie">Movies</button>
         <button class="lane ${filter==="tv"?"on":""}" data-catfilter="tv">TV shows</button>
       </div>
+    </div>
+    <div class="ov-body" id="catBody">
       <div class="grid">${items.map(posterCard).join("")}</div>
       ${c.more?`<div style="padding:18px;display:flex;justify-content:center"><div class="spin"></div></div>`:""}
     </div>
