@@ -78,6 +78,7 @@ header.top > * { pointer-events:auto; }
 .feed { height:100dvh; overflow-y:auto; scroll-snap-type:y mandatory; scrollbar-width:none; }
 .feed::-webkit-scrollbar { display:none; }
 .slide { height:100dvh; scroll-snap-align:start; position:relative; overflow:hidden; }
+.stage { position:absolute; inset:0; }
 .slide img.bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scale(1.06); }
 .slide.active img.bg { animation: ken 22s linear alternate infinite; }
 .trailer-cover { position:absolute; inset:0; overflow:hidden; background:#000; }
@@ -91,9 +92,14 @@ header.top > * { pointer-events:auto; }
   linear-gradient(to top, color-mix(in oklab, var(--bg) 92%, transparent) 0%, transparent 42%),
   linear-gradient(to right, color-mix(in oklab, var(--bg) 55%, transparent), transparent 40%);
 }
-.meta { position:absolute; left:16px; right:92px; bottom: max(88px, calc(env(safe-area-inset-bottom) + 64px)); }
+.meta { position:absolute; left:16px; right:92px; bottom: max(22px, calc(env(safe-area-inset-bottom) + 14px)); }
 .kicker { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; margin-bottom:6px; }
-.meta h2 { margin:0 0 8px; font-family:var(--font-display); font-size: clamp(1.7rem, 6vw, 2.4rem); line-height:.95; letter-spacing:-.03em; }
+.meta h2 { margin:0 0 8px; font-family:var(--font-display); font-size: clamp(1.7rem, 6vw, 2.4rem); line-height:.95; letter-spacing:-.03em; display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; }
+.ep-chip {
+  font-family:var(--font-sans); font-size:11px; font-weight:700; letter-spacing:.08em;
+  padding:5px 10px; border-radius:999px; border:1px solid var(--line);
+  background: color-mix(in oklab, var(--elevated) 75%, transparent); color:var(--accent);
+}
 .meta p { margin:0; color:var(--muted); font-size:13px; line-height:1.45; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .cast-row { display:flex; gap:10px; overflow-x:auto; margin-top:12px; scrollbar-width:none; }
 .cast-row::-webkit-scrollbar{display:none}
@@ -101,7 +107,7 @@ header.top > * { pointer-events:auto; }
 .cast img, .cast .ph { width:46px; height:46px; border-radius:50%; object-fit:cover; margin:0 auto 4px; background:var(--elevated); display:grid; place-items:center; font-size:14px; }
 .cast span { font-size:10px; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-.rail { position:absolute; right:10px; bottom: max(96px, calc(env(safe-area-inset-bottom) + 72px)); display:flex; flex-direction:column; align-items:center; gap:14px; }
+.rail { position:absolute; right:10px; bottom: max(28px, calc(env(safe-area-inset-bottom) + 16px)); display:flex; flex-direction:column; align-items:center; gap:12px; }
 .rail .studio { display:flex; flex-direction:column; align-items:center; gap:6px; width:72px; }
 .studio .mark { width:48px; height:48px; border-radius:50%; background:var(--fg); color:var(--bg); display:grid; place-items:center; overflow:hidden; border:1px solid var(--line); }
 .studio .mark img { max-width:36px; max-height:28px; object-fit:contain; }
@@ -188,8 +194,36 @@ header.top > * { pointer-events:auto; }
 .tabs-lib { display:flex; gap:8px; padding:0 16px 8px; }
 .empty { color:var(--muted); padding:32px 8px; font-size:14px; }
 
-@media (min-width: 900px) {
-  .app { max-width:480px; margin:0 auto; border-left:1px solid var(--line); border-right:1px solid var(--line); }
+.eps-wrap { display:flex; flex-wrap:wrap; gap:6px; }
+.eps-wrap button, .svr-wrap button {
+  height:32px; padding:0 10px; border-radius:999px; border:1px solid var(--line);
+  background:var(--elevated); font-size:12px; font-weight:600;
+}
+.eps-wrap button.on, .svr-wrap button.on { background:var(--accent); color:var(--accent-fg); border-color:transparent; }
+.player:fullscreen .player-bar,
+.player:-webkit-full-screen .player-bar { display:none; }
+.player:fullscreen iframe,
+.player:-webkit-full-screen iframe { height:100%; }
+
+@media (min-width: 960px) {
+  .app { max-width:none; }
+  header.top { padding-left: 28px; padding-right: 28px; }
+  .brand h1 { font-size: 3rem; }
+  .feed { scroll-snap-type: y mandatory; }
+  .slide { display:grid; place-items:center; background:var(--bg); }
+  .stage {
+    position:relative; inset:auto; width:min(1180px, calc(100vw - 48px));
+    height: min(78vh, 720px); border-radius: 28px; overflow:hidden;
+    border:1px solid var(--line);
+    box-shadow: 0 30px 80px rgba(0,0,0,.45);
+  }
+  .slide img.bg, .trailer-slot, .trailer-cover, .veil { position:absolute; inset:0; }
+  .meta { left:28px; right:110px; bottom:28px; }
+  .meta h2 { font-size: 3rem; }
+  .meta p { -webkit-line-clamp:2; max-width: 640px; font-size:15px; }
+  .rail { right:22px; bottom:28px; }
+  .player { background:#050506; }
+  .player iframe { margin: 0 auto; width: min(1280px, 100%); }
 }
 </style>
 </head>
@@ -206,9 +240,17 @@ const IMG = {
   profile: "https://image.tmdb.org/t/p/w185",
   logo: "https://image.tmdb.org/t/p/w185",
 };
-const VIX = {
-  movie: id => `https://vixsrc.to/movie/${id}?autoplay=1`,
-  tv: (id,s=1,e=1) => `https://vixsrc.to/tv/${id}/${s}/${e}?autoplay=1`,
+const SERVERS = {
+  vix: {
+    label: "VixSrc",
+    movie: id => `https://vixsrc.to/movie/${id}?autoplay=1`,
+    tv: (id,s=1,e=1) => `https://vixsrc.to/tv/${id}/${s}/${e}?autoplay=1`,
+  },
+  videasy: {
+    label: "Videasy",
+    movie: id => `https://player.videasy.net/movie/${id}?overlay=true`,
+    tv: (id,s=1,e=1) => `https://player.videasy.net/tv/${id}/${s}/${e}?episodeSelector=true&nextEpisode=true&overlay=true`,
+  },
 };
 const LANES = [
   {id:"foryou",label:"For You"},
@@ -420,6 +462,12 @@ const state = {
   boot: true,
   overlay: "none", // search | library | settings | synopsis | studio | person
   watching: null,
+  watchS: 1,
+  watchE: 1,
+  server: localStorage.getItem("bwhs-server") || "vix",
+  epPick: null,
+  seasons: {},
+  episodes: {},
   jumpTo: null,
   synopsis: null,
   catalog: null,
@@ -460,6 +508,7 @@ function render(){
     ${state.overlay==="synopsis" && state.synopsis ? synopsisHTML(state.synopsis) : ""}
     ${state.overlay==="studio" || state.overlay==="person" ? catalogHTML() : ""}
     ${state.watching ? playerHTML(state.watching) : ""}
+    ${state.epPick ? epsHTML(state.epPick) : ""}
   `;
   bind();
 }
@@ -490,13 +539,15 @@ function slideHTML(r,i){
     ? (hd ? IMG.backdropHd : IMG.backdrop)+r.backdropPath
     : (r.posterPath?IMG.poster+r.posterPath:"");
   const saved = isSaved(r);
+  const se = r.mediaType==="tv" ? (r.lastSE || {s:1,e:1}) : null;
   return `<article class="slide ${hd?"active":""}" data-i="${i}">
+    <div class="stage">
     ${bg?`<img class="bg" src="${bg}" alt="" loading="${i<3?"eager":"lazy"}">`:""}
     <div class="trailer-slot"></div>
     <div class="veil"></div>
     <div class="meta">
       <div class="kicker">${r.mediaType==="tv"?"Series":"Film"} ${r.year? "· "+r.year:""} ${r.rating? "· "+r.rating.toFixed(1):""}</div>
-      <h2 data-open="${i}">${esc(r.title)}</h2>
+      <h2><span data-open="${i}">${esc(r.title)}</span>${r.mediaType==="tv"?`<button class="ep-chip" data-eps="${i}">[S${String(se.s).padStart(2,"0")}E${String(se.e).padStart(2,"0")}]</button>`:""}</h2>
       <p>${esc(r.overview||"")}</p>
       <div class="cast-row">
         ${(r.cast||[]).slice(0,6).map(p=>`<button class="cast" data-person='${escAttr(JSON.stringify(p))}'>
@@ -516,6 +567,7 @@ function slideHTML(r,i){
       </div>
       <button class="rbtn ${saved?"saved":""}" data-save="${i}"><i>${icon("heart")}</i><span>${saved?"Saved":"Save"}</span></button>
       <button class="rbtn" id="${i===state.active?"muteBtn":""}" data-mute="1"><i>${store.muted?icon("mute"):icon("vol")}</i><span>${store.muted?"Muted":"Sound"}</span></button>
+    </div>
     </div>
   </article>`;
 }
@@ -612,15 +664,41 @@ function catalogHTML(){
     <div class="ov-body"><div class="grid">${(c.items||[]).map(t=>`<button class="card" data-open-title='${escAttr(JSON.stringify(t))}'>${t.posterPath?`<img src="${IMG.poster+t.posterPath}">`:""}<b>${esc(t.title)}</b></button>`).join("")}</div></div>
   </section>`;
 }
+function playSrc(r){
+  const s = SERVERS[state.server] || SERVERS.vix;
+  return r.mediaType==="tv" ? s.tv(r.id, state.watchS, state.watchE) : s.movie(r.id);
+}
 function playerHTML(r){
-  const src = r.mediaType==="tv" ? VIX.tv(r.id) : VIX.movie(r.id);
+  const src = playSrc(r);
+  const seLabel = r.mediaType==="tv" ? ` [S${String(state.watchS).padStart(2,"0")}E${String(state.watchE).padStart(2,"0")}]` : "";
   return `<div class="player" id="cinema">
     <div class="player-bar">
       <button class="icon-btn" id="closePlayer">${icon("x")}</button>
-      <strong>${esc(r.title)}</strong>
+      <strong>${esc(r.title)}${seLabel}</strong>
+      <div class="svr-wrap">
+        ${Object.entries(SERVERS).map(([k,v])=>`<button data-server="${k}" class="${state.server===k?"on":""}">${v.label}</button>`).join("")}
+      </div>
+      ${r.mediaType==="tv"?`<button class="ep-chip" id="playerEps">Episodes</button>`:""}
       <button class="icon-btn" id="fsPlayer" aria-label="Fullscreen">${icon("expand")}</button>
     </div>
     <iframe src="${src}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe>
+  </div>`;
+}
+function epsHTML(reel){
+  const key = "tv-"+reel.id;
+  const seasons = state.seasons[key] || [];
+  const eps = state.episodes[key+"-"+state.watchS] || [];
+  return `<div class="sheet" id="epSheet" style="z-index:60">
+    <div class="kicker">Episodes</div>
+    <h2>${esc(reel.title)} <span class="ep-chip">[S${String(state.watchS).padStart(2,"0")}E${String(state.watchE).padStart(2,"0")}]</span></h2>
+    <div class="sec">Seasons</div>
+    <div class="eps-wrap">${seasons.map(s=>`<button data-season="${s.n}" class="${s.n===state.watchS?"on":""}">S${s.n}</button>`).join("") || "<span class='empty'>Loading seasons…</span>"}</div>
+    <div class="sec">Episodes</div>
+    <div class="eps-wrap">${eps.map(e=>`<button data-episode="${e.n}" class="${e.n===state.watchE?"on":""}">E${e.n}${e.name?" · "+esc(e.name):""}</button>`).join("") || "<span class='empty'>Pick a season</span>"}</div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="cta" id="playEp">Play this episode</button>
+      <button class="icon-btn" id="closeEps">${icon("x")}</button>
+    </div>
   </div>`;
 }
 
@@ -686,6 +764,33 @@ function bind(){
     requestAnimationFrame(()=>syncTrailers());
   });
   $("#fsPlayer")?.addEventListener("click", ()=>toggleCinemaFs());
+  document.querySelectorAll("[data-server]").forEach(b=>b.addEventListener("click", ()=>{
+    state.server = b.dataset.server;
+    localStorage.setItem("bwhs-server", state.server);
+    const frame = document.querySelector("#cinema iframe");
+    if (frame && state.watching) frame.src = playSrc(state.watching);
+    document.querySelectorAll("[data-server]").forEach(x=>x.classList.toggle("on", x.dataset.server===state.server));
+  }));
+  document.querySelectorAll("[data-eps]").forEach(b=>b.addEventListener("click", e=>{
+    e.stopPropagation();
+    openEpisodes(state.items[+b.dataset.eps]);
+  }));
+  $("#playerEps")?.addEventListener("click", ()=> state.watching && openEpisodes(state.watching));
+  $("#closeEps")?.addEventListener("click", ()=>{ state.epPick=null; render(); });
+  document.querySelectorAll("[data-season]").forEach(b=>b.addEventListener("click", ()=>{
+    state.watchS = +b.dataset.season; state.watchE = 1;
+    if (state.epPick) loadEpisodes(state.epPick, state.watchS).then(()=>render());
+    else render();
+  }));
+  document.querySelectorAll("[data-episode]").forEach(b=>b.addEventListener("click", ()=>{
+    state.watchE = +b.dataset.episode;
+    if (state.epPick) state.epPick.lastSE = {s:state.watchS,e:state.watchE};
+    render();
+  }));
+  $("#playEp")?.addEventListener("click", ()=>{
+    const r = state.epPick; state.epPick=null;
+    if (r) openWatch(r);
+  });
   document.querySelectorAll("[data-lane]").forEach(b=>b.addEventListener("click", ()=>loadLane(b.dataset.lane)));
   document.querySelectorAll("[data-watch]").forEach(b=>b.addEventListener("click", ()=>openWatch(state.items[+b.dataset.watch])));
   document.querySelectorAll("[data-save]").forEach(b=>b.addEventListener("click", ()=>{
@@ -844,12 +949,44 @@ async function runSearch(q){
 function openWatch(reel){
   if(!reel) return;
   addHistory(reel);
-  state.watching=reel; state.overlay="none";
+  state.watching=reel; state.overlay="none"; state.epPick=null;
+  if (reel.mediaType==="tv") {
+    if (reel.lastSE) { state.watchS=reel.lastSE.s; state.watchE=reel.lastSE.e; }
+    loadSeasons(reel);
+  }
   render();
   const cinema = document.getElementById("cinema");
-  if (isPhone()) {
-    if (cinema) enterLandscape(cinema);
-  }
+  if (isPhone() && cinema) enterLandscape(cinema);
+}
+async function loadSeasons(reel){
+  const key="tv-"+reel.id;
+  if (state.seasons[key]) return state.seasons[key];
+  try {
+    const d = await tmdb(`/tv/${reel.id}`);
+    state.seasons[key] = (d.seasons||[]).filter(s=>s.season_number>0 && s.episode_count>0)
+      .map(s=>({n:s.season_number, count:s.episode_count, name:s.name}));
+    if (!state.watchS) state.watchS = state.seasons[key][0]?.n || 1;
+    await loadEpisodes(reel, state.watchS);
+  } catch { state.seasons[key]=[]; }
+  return state.seasons[key];
+}
+async function loadEpisodes(reel, season){
+  const key="tv-"+reel.id+"-"+season;
+  if (state.episodes[key]) return state.episodes[key];
+  try {
+    const d = await tmdb(`/tv/${reel.id}/season/${season}`);
+    state.episodes[key] = (d.episodes||[]).map(e=>({n:e.episode_number, name:e.name||""}));
+  } catch { state.episodes[key]=[]; }
+  return state.episodes[key];
+}
+async function openEpisodes(reel){
+  if (!reel || reel.mediaType!=="tv") return;
+  state.epPick = reel;
+  if (reel.lastSE) { state.watchS=reel.lastSE.s; state.watchE=reel.lastSE.e; }
+  render();
+  await loadSeasons(reel);
+  await loadEpisodes(reel, state.watchS);
+  render();
 }
 
 async function openPerson(p){
