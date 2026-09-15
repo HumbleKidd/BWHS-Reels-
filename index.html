@@ -145,10 +145,24 @@ header.top > * { pointer-events:auto; }
 .chip { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:var(--surface); margin:0 6px 8px 0; font-size:13px; }
 .people { display:flex; gap:10px; overflow-x:auto; scrollbar-width:none; }
 .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
-.card { text-align:left; }
+.card { text-align:left; position:relative; }
 .card img { width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:12px; background:var(--elevated); }
 .card b { display:block; margin-top:6px; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .card small { color:var(--muted); font-size:11px; }
+.card .heart {
+  position:absolute; top:8px; right:8px; width:34px; height:34px; border-radius:50%;
+  background: rgba(0,0,0,.55); display:grid; place-items:center; border:1px solid var(--line);
+}
+.card .heart.on { color:#ff6b7a; }
+.tip {
+  position:absolute; top:88px; right:24px; z-index:30;
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  border:1px solid var(--line); border-radius:16px; padding:12px 14px; max-width:240px;
+  backdrop-filter: blur(12px); font-size:13px; line-height:1.4;
+}
+.tip kbd { font-size:11px; border:1px solid var(--line); border-radius:6px; padding:1px 6px; }
+.cat-hero { display:flex; gap:16px; align-items:center; padding: 0 4px 16px; }
+.cat-hero img, .cat-hero .ph { width:72px; height:72px; border-radius:18px; object-fit:cover; background:var(--elevated); }
 
 .sheet {
   position:absolute; left:0; right:0; bottom:0; z-index:45;
@@ -224,6 +238,8 @@ header.top > * { pointer-events:auto; }
   .rail { right:22px; bottom:28px; }
   .player { background:#050506; }
   .player iframe { margin: 0 auto; width: min(1280px, 100%); }
+  .grid { grid-template-columns: repeat(6, 1fr); gap:14px; }
+  .ov-body { padding: 8px 28px 48px; }
 }
 </style>
 </head>
@@ -330,7 +346,7 @@ function ytEmbed(key, muted){
   const p = new URLSearchParams({
     autoplay:"1", mute: muted?"1":"0", controls:"0", rel:"0", modestbranding:"1",
     playsinline:"1", enablejsapi:"1", loop:"1", playlist:key, fs:"0",
-    iv_load_policy:"3", disablekb:"1", origin: location.origin
+    iv_load_policy:"3", disablekb:"1", cc_load_policy:"0", origin: location.origin
   });
   return `https://www.youtube-nocookie.com/embed/${key}?${p}`;
 }
@@ -368,22 +384,62 @@ async function hydrate(reel) {
     hydrated: true,
   };
 }
-async function fetchLane(lane, page=1) {
-  if (lane==="saved") return store.saved;
-  if (lane==="history") return store.history;
-  const common = { page };
-  let data;
-  if (lane==="movies") data = await tmdb("/discover/movie", {...common, sort_by:"popularity.desc"});
-  else if (lane==="shows") data = await tmdb("/discover/tv", {...common, sort_by:"popularity.desc", "without_genres":"10763,10764,10767,10766"});
-  else if (lane==="animation") data = await tmdb("/discover/movie", {...common, with_genres:16, sort_by:"popularity.desc"});
-  else if (lane==="action") data = await tmdb("/discover/movie", {...common, with_genres:28, sort_by:"popularity.desc"});
-  else if (lane==="comedy") data = await tmdb("/trending/all/week", common);
-  else if (lane==="horror") data = await tmdb("/discover/movie", {...common, with_genres:27, sort_by:"popularity.desc"});
-  else data = await tmdb("/trending/all/day", common);
-  const rows = (data.results||[])
-    .filter(x => x.media_type!=="person" && (x.poster_path||x.backdrop_path) && !x.adult)
-    .map(x => mapItem(x, x.media_type==="tv"?"tv": (lane==="shows"?"tv": (lane==="movies"||lane==="action"||lane==="horror"||lane==="animation"?"movie": (x.title?"movie":"tv")))));
-  return rows;
+const SORTS = ["popularity.desc","vote_count.desc","primary_release_date.desc","revenue.desc","vote_average.desc"];
+const lanePool = {};
+function shuffle(arr){
+  const a=arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function nextDiscoverPage(lane){
+  if (!lanePool[lane]) lanePool[lane] = { used:new Set(), max:500 };
+  const pool = lanePool[lane];
+  let guard=0;
+  while (guard++<40){
+    const p = 1 + Math.floor(Math.random()*pool.max);
+    if (!pool.used.has(p)) { pool.used.add(p); return p; }
+  }
+  pool.used.clear();
+  const p = 1 + Math.floor(Math.random()*pool.max);
+  pool.used.add(p);
+  return p;
+}
+async function fetchLane(lane) {
+  if (lane==="saved") return store.saved.slice();
+  if (lane==="history") return store.history.slice();
+  const page = nextDiscoverPage(lane);
+  const sort = SORTS[Math.floor(Math.random()*SORTS.length)];
+  const year = 1970 + Math.floor(Math.random()*57);
+  let rows = [];
+  try {
+    if (lane==="movies") {
+      const data = await tmdb("/discover/movie", { page, sort_by:sort, include_adult:"false" });
+      rows = (data.results||[]).map(x=>mapItem(x,"movie"));
+    } else if (lane==="shows") {
+      const data = await tmdb("/discover/tv", { page, sort_by:sort==="revenue.desc"?"popularity.desc":sort, without_genres:"10763,10764,10767,10766" });
+      rows = (data.results||[]).map(x=>mapItem(x,"tv"));
+    } else if (lane==="animation") {
+      const which = Math.random()>.45 ? "movie" : "tv";
+      const data = await tmdb(`/discover/${which}`, { page, with_genres:16, sort_by:sort==="revenue.desc"?"popularity.desc":sort });
+      rows = (data.results||[]).map(x=>mapItem(x,which));
+    } else if (lane==="action") {
+      const data = await tmdb("/discover/movie", { page, with_genres:28, sort_by:sort });
+      rows = (data.results||[]).map(x=>mapItem(x,"movie"));
+    } else if (lane==="comedy") {
+      const which = Math.random()>.5 ? "movie" : "tv";
+      const data = await tmdb(`/discover/${which}`, { page, with_genres:35, sort_by:sort==="revenue.desc"?"popularity.desc":sort });
+      rows = (data.results||[]).map(x=>mapItem(x,which));
+    } else if (lane==="horror") {
+      const data = await tmdb("/discover/movie", { page, with_genres:27, sort_by:sort });
+      rows = (data.results||[]).map(x=>mapItem(x,"movie"));
+    } else {
+      const which = Math.random()>.5 ? "movie" : "tv";
+      const extra = Math.random()>.6 ? { "primary_release_date.gte": `${year}-01-01` } : {};
+      const data = await tmdb(`/discover/${which}`, { page, sort_by:sort==="revenue.desc" && which==="tv"?"popularity.desc":sort, ...extra, without_genres: which==="tv"?"10763,10764,10767,10766":undefined });
+      rows = (data.results||[]).map(x=>mapItem(x,which));
+    }
+  } catch { rows = []; }
+  return shuffle(rows.filter(x => !x.adult && (x.posterPath||x.backdropPath||x.overview)));
 }
 
 function loadJSON(k, fallback) {
@@ -509,6 +565,7 @@ function render(){
     ${state.overlay==="studio" || state.overlay==="person" ? catalogHTML() : ""}
     ${state.watching ? playerHTML(state.watching) : ""}
     ${state.epPick ? epsHTML(state.epPick) : ""}
+    ${!isPhone() && !localStorage.getItem("bwhs-keys-tip") && state.overlay==="none" && !state.watching ? `<div class="tip" id="keyTip">On desktop use <kbd>↑</kbd> <kbd>↓</kbd> to move through reels. Click anywhere to dismiss.</div>` : ""}
   `;
   bind();
 }
@@ -657,11 +714,41 @@ function synopsisHTML(r){
     </div>
   </div>`;
 }
+function posterCard(t){
+  const saved = isSaved(t);
+  const art = t.posterPath ? IMG.poster+t.posterPath : (t.backdropPath ? IMG.backdrop+t.backdropPath : "");
+  return `<div class="card">
+    <button type="button" data-open-title='${escAttr(JSON.stringify(t))}'>
+      ${art?`<img src="${art}" alt="${escAttr(t.title)}" loading="lazy">`:`<div class="ph" style="aspect-ratio:2/3;border-radius:12px;background:var(--elevated)"></div>`}
+    </button>
+    <button class="heart ${saved?"on":""}" data-save-item='${escAttr(JSON.stringify(t))}' aria-label="Save">${icon("heart")}</button>
+    <b>${esc(t.title)}</b>
+    <small>${t.mediaType==="tv"?"TV":"Movie"}${t.year?" · "+t.year:""}</small>
+  </div>`;
+}
 function catalogHTML(){
-  const c = state.catalog || {title:"Catalogue", items:[]};
+  const c = state.catalog || {title:"Catalogue", items:[], filter:"all"};
+  const filter = c.filter || "all";
+  const items = (c.items||[]).filter(t => filter==="all" || t.mediaType===filter);
   return `<section class="overlay">
     <header class="ov-head"><button class="icon-btn" id="closeOv">${icon("back")}</button><h3>${esc(c.title)}</h3></header>
-    <div class="ov-body"><div class="grid">${(c.items||[]).map(t=>`<button class="card" data-open-title='${escAttr(JSON.stringify(t))}'>${t.posterPath?`<img src="${IMG.poster+t.posterPath}">`:""}<b>${esc(t.title)}</b></button>`).join("")}</div></div>
+    <div class="ov-body" id="catBody">
+      <div class="cat-hero">
+        ${c.image?`<img src="${c.image}" alt="">`:`<span class="ph">${esc((c.title||"B")[0])}</span>`}
+        <div>
+          <div class="kicker">${c.mode==="person"?"Filmography":"Studio / Network"}</div>
+          <strong>${esc(c.title)}</strong>
+          <div class="empty" style="padding:6px 0 0">${items.length} titles${c.more?" and counting":""}</div>
+        </div>
+      </div>
+      <div class="tabs-lib">
+        <button class="lane ${filter==="all"?"on":""}" data-catfilter="all">All</button>
+        <button class="lane ${filter==="movie"?"on":""}" data-catfilter="movie">Movies</button>
+        <button class="lane ${filter==="tv"?"on":""}" data-catfilter="tv">TV shows</button>
+      </div>
+      <div class="grid">${items.map(posterCard).join("")}</div>
+      ${c.more?`<div style="padding:18px;display:flex;justify-content:center"><div class="spin"></div></div>`:""}
+    </div>
   </section>`;
 }
 function playSrc(r){
@@ -819,6 +906,26 @@ function bind(){
   }));
   document.querySelectorAll("[data-theme]").forEach(b=>b.addEventListener("click", ()=>{ applyTheme(b.dataset.theme); render(); }));
   document.querySelectorAll("[data-lib]").forEach(b=>b.addEventListener("click", ()=>{ state.libTab=b.dataset.lib; render(); }));
+  document.querySelectorAll("[data-catfilter]").forEach(b=>b.addEventListener("click", ()=>{
+    if (!state.catalog) return;
+    state.catalog.filter = b.dataset.catfilter;
+    render();
+  }));
+  document.querySelectorAll("[data-save-item]").forEach(b=>b.addEventListener("click", e=>{
+    e.stopPropagation();
+    const reel = JSON.parse(b.getAttribute("data-save-item"));
+    toggleSaved(reel);
+    b.classList.toggle("on", isSaved(reel));
+  }));
+  $("#keyTip")?.addEventListener("click", ()=>{
+    localStorage.setItem("bwhs-keys-tip","1");
+    $("#keyTip")?.remove();
+  });
+  $("#catBody")?.addEventListener("scroll", ()=>{
+    const el = $("#catBody");
+    if (!el || !state.catalog?.more || state.catalog._loading) return;
+    if (el.scrollTop + el.clientHeight > el.scrollHeight - 400) loadCatalogMore();
+  }, {passive:true});
   document.querySelectorAll("[data-recent]").forEach(b=>b.addEventListener("click", ()=>{ state.searchQ=b.dataset.recent; runSearch(state.searchQ); }));
   $("#clearSearches")?.addEventListener("click", ()=>{ store.searches=[]; persistLists(); render(); });
   $("#synWatch")?.addEventListener("click", ()=>openWatch(state.synopsis));
@@ -909,7 +1016,15 @@ async function loadLane(id){
   state.lane=id; state.boot=true; state.page=1; state.active=0; state.overlay="none"; state.items=[];
   render();
   try {
-    state.items = await fetchLane(id,1);
+    const first = await fetchLane(id);
+    const second = await fetchLane(id);
+    const seen = new Set();
+    state.items = [];
+    for (const r of first.concat(second)) {
+      const k=r.mediaType+r.id;
+      if (seen.has(k)) continue;
+      seen.add(k); state.items.push(r);
+    }
   } catch(e){ state.items=[]; }
   state.boot=false;
   render();
@@ -920,12 +1035,36 @@ async function loadMore(){
   if (state.lane==="saved"||state.lane==="history"||state._more) return;
   state._more=true;
   try {
-    const next = await fetchLane(state.lane, state.page+1);
-    state.page+=1;
+    const next = await fetchLane(state.lane);
     const seen = new Set(state.items.map(x=>x.mediaType+x.id));
-    state.items = state.items.concat(next.filter(x=>!seen.has(x.mediaType+x.id)));
+    const add = next.filter(x=>!seen.has(x.mediaType+x.id));
+    const start = state.items.length;
+    state.items = state.items.concat(add);
+    const feed = $("#feed");
+    if (feed && add.length) {
+      add.forEach((r,i)=> feed.insertAdjacentHTML("beforeend", slideHTML(r, start+i)));
+      bindNewSlides(start);
+    }
   } catch {}
   state._more=false;
+}
+function bindNewSlides(from){
+  document.querySelectorAll("[data-watch]").forEach(b=>{
+    if (+b.dataset.watch>=from) b.addEventListener("click", ()=>openWatch(state.items[+b.dataset.watch]));
+  });
+  document.querySelectorAll("[data-save]").forEach(b=>{
+    if (+b.dataset.save>=from) b.addEventListener("click", ()=>{
+      toggleSaved(state.items[+b.dataset.save]);
+      b.classList.toggle("saved", isSaved(state.items[+b.dataset.save]));
+      b.querySelector("span").textContent = isSaved(state.items[+b.dataset.save])?"Saved":"Save";
+    });
+  });
+  document.querySelectorAll("[data-open]").forEach(b=>{
+    if (+b.dataset.open>=from) b.addEventListener("click", ()=>{ state.synopsis=state.items[+b.dataset.open]; state.overlay="synopsis"; render(); });
+  });
+  document.querySelectorAll("[data-eps]").forEach(b=>{
+    if (+b.dataset.eps>=from) b.addEventListener("click", e=>{ e.stopPropagation(); openEpisodes(state.items[+b.dataset.eps]); });
+  });
 }
 
 async function runSearch(q){
@@ -991,29 +1130,78 @@ async function openEpisodes(reel){
 
 async function openPerson(p){
   state.overlay="person";
-  state.catalog={title:p.name, items:[]};
+  state.catalog={
+    mode:"person", title:p.name, items:[], filter:"all", more:false,
+    image: p.profilePath ? IMG.profile+p.profilePath : null
+  };
   render();
   try {
     const d = await tmdb(`/person/${p.id}/combined_credits`);
-    state.catalog.items = (d.cast||[]).filter(x=>x.poster_path).slice(0,40).map(x=>mapItem(x, x.media_type==="tv"?"tv":"movie"));
+    const seen = new Set();
+    const list = [];
+    for (const x of (d.cast||[]).concat(d.crew||[])) {
+      const type = x.media_type==="tv"?"tv":"movie";
+      const k = type+x.id;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      list.push(mapItem(x, type));
+    }
+    list.sort((a,b)=>(b.year||"0").localeCompare(a.year||"0"));
+    state.catalog.items = list;
   } catch {}
   render();
 }
 async function openStudio(s){
   state.overlay="studio";
-  state.catalog={title:s.name, items:[]};
+  state.catalog={
+    mode:"studio", title:s.name, studio:s, items:[], filter:"all", more:true,
+    pageMovie:1, pageTv:1, moreMovie:true, moreTv:true,
+    image: s.logoPath ? IMG.logo+s.logoPath : null
+  };
   render();
-  try {
-    const path = s.kind==="network" ? "/discover/tv" : "/discover/movie";
-    const key = s.kind==="network" ? "with_networks" : "with_companies";
-    const d = await tmdb(path, {[key]:s.id, sort_by:"popularity.desc"});
-    state.catalog.items = (d.results||[]).map(x=>mapItem(x, s.kind==="network"?"tv":"movie"));
-  } catch {}
+  await loadCatalogMore();
+}
+async function loadCatalogMore(){
+  const c = state.catalog;
+  if (!c || c.mode!=="studio" || c._loading) return;
+  c._loading = true;
+  const s = c.studio;
+  const company = s.kind!=="network";
+  const jobs = [];
+  if (c.moreMovie) jobs.push(tmdb("/discover/movie", { page:c.pageMovie, sort_by:"popularity.desc", with_companies:s.id }).then(d=>{
+    c.pageMovie += 1;
+    c.moreMovie = (d.page||1) < (d.total_pages||1) && c.pageMovie <= 500;
+    return (d.results||[]).map(x=>mapItem(x,"movie"));
+  }).catch(()=>{ c.moreMovie=false; return []; }));
+  if (c.moreTv) jobs.push(tmdb("/discover/tv", { page:c.pageTv, sort_by:"popularity.desc", [company?"with_companies":"with_networks"]:s.id }).then(d=>{
+    c.pageTv += 1;
+    c.moreTv = (d.page||1) < (d.total_pages||1) && c.pageTv <= 500;
+    return (d.results||[]).map(x=>mapItem(x,"tv"));
+  }).catch(()=>{ c.moreTv=false; return []; }));
+  const chunks = await Promise.all(jobs);
+  const seen = new Set(c.items.map(x=>x.mediaType+x.id));
+  chunks.flat().forEach(x=>{
+    const k=x.mediaType+x.id;
+    if (!seen.has(k)) { seen.add(k); c.items.push(x); }
+  });
+  c.more = c.moreMovie || c.moreTv;
+  c._loading = false;
   render();
 }
 
 applyTheme(store.themeId);
 if (store.themeId==="auto") setInterval(()=>applyTheme("auto"), 10*60*1000);
+window.addEventListener("keydown", e=>{
+  if (state.overlay!=="none" || state.watching || state.epPick) return;
+  if (e.key!=="ArrowDown" && e.key!=="ArrowUp") return;
+  e.preventDefault();
+  localStorage.setItem("bwhs-keys-tip","1");
+  $("#keyTip")?.remove();
+  const feed = $("#feed");
+  if (!feed) return;
+  const next = e.key==="ArrowDown" ? Math.min(state.active+1, state.items.length-1) : Math.max(state.active-1, 0);
+  feed.scrollTo({ top: next * feed.clientHeight, behavior:"smooth" });
+});
 render();
 loadLane("foryou");
 </script>
