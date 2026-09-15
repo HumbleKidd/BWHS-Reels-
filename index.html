@@ -137,12 +137,14 @@ header.top > * { pointer-events:auto; }
 .stage { position:absolute; inset:0; }
 .slide img.bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scale(1.06); }
 .slide.active img.bg { animation: ken 22s linear alternate infinite; }
-.trailer-cover { position:absolute; inset:0; overflow:hidden; background:#000; }
+.trailer-cover { position:absolute; inset:0; overflow:hidden; background:transparent; }
 .trailer-cover iframe {
   position:absolute; top:50%; left:50%; border:0;
   height:100%; width:177.78%; min-width:100%; min-height:56.25vw;
   transform:translate(-50%,-50%);
+  opacity:0; transition: opacity .5s ease;
 }
+.trailer-cover.ready iframe { opacity:1; }
 .trailer-hit {
   position:absolute; inset:0; z-index:2;
 }
@@ -179,13 +181,21 @@ header.top > * { pointer-events:auto; }
 .rail { position:absolute; right:10px; bottom: max(28px, calc(env(safe-area-inset-bottom) + 16px)); display:flex; flex-direction:column; align-items:center; gap:12px; z-index:5; }
 .rail .studio { display:flex; flex-direction:column; align-items:center; gap:6px; width:72px; }
 .studio .mark {
-  width:44px; height:44px; border-radius:50%;
-  background: linear-gradient(145deg, #fff, #d8d2c6);
+  width:48px; height:48px; border-radius:14px;
+  background: #f4f0e8;
   color:#111; display:grid; place-items:center; overflow:hidden;
-  border:1px solid var(--line);
+  border:1px solid rgba(255,255,255,.18);
   box-shadow: 0 6px 16px rgba(0,0,0,.28);
+  padding:5px;
 }
-.studio .mark img { max-width:30px; max-height:24px; object-fit:contain; filter: none; }
+.studio .mark.dark { background:#121216; }
+.studio .mark img { max-width:38px; max-height:28px; width:auto; height:auto; object-fit:contain; filter: none; }
+.rail-art {
+  width:46px; aspect-ratio:2/3; border-radius:8px; overflow:hidden;
+  border:1px solid var(--line); box-shadow: 0 6px 14px rgba(0,0,0,.35);
+  background:var(--elevated);
+}
+.rail-art img { width:100%; height:100%; object-fit:cover; }
 .studio small { font-size:10px; color:var(--muted); width:100%; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .play {
   width:44px; height:44px; border-radius:50%; background:var(--accent); color:var(--accent-fg);
@@ -401,7 +411,7 @@ const IMG = {
   backdrop: "https://image.tmdb.org/t/p/w780",
   backdropHd: "https://image.tmdb.org/t/p/w1280",
   profile: "https://image.tmdb.org/t/p/w185",
-  logo: "https://image.tmdb.org/t/p/w185",
+  logo: "https://image.tmdb.org/t/p/w300",
 };
 const SERVERS = {
   vixsrc: {
@@ -585,6 +595,28 @@ async function findTrailerKey(mediaType, id, title, year){
   if (yt) { trailerCache[cacheK]=yt; saveTrailerCache(); return yt; }
   return null;
 }
+async function colorLogo(studio){
+  if (!studio || !studio.id) return studio;
+  try {
+    const path = studio.kind==="network" ? `/network/${studio.id}/images` : `/company/${studio.id}/images`;
+    const d = await tmdb(path);
+    const logos = d.logos || [];
+    if (!logos.length) {
+      studio.logoDark = /\.svg$/i.test(studio.logoPath||"");
+      return studio;
+    }
+    const scored = logos.slice().sort((a,b)=>{
+      const ap = a.file_path||"", bp = b.file_path||"";
+      const asvg = /\.svg$/i.test(ap), bsvg = /\.svg$/i.test(bp);
+      return (asvg-bsvg) || (b.vote_average||0)-(a.vote_average||0) || (b.width||0)-(a.width||0);
+    });
+    studio.logoPath = scored[0].file_path;
+    studio.logoDark = /\.svg$/i.test(studio.logoPath||"");
+  } catch {
+    studio.logoDark = /\.svg$/i.test(studio.logoPath||"");
+  }
+  return studio;
+}
 async function hydrate(reel) {
   if (reel.hydrated && reel.trailerKey) return reel;
   const cacheK = `${reel.mediaType}-${reel.id}`;
@@ -600,12 +632,14 @@ async function hydrate(reel) {
   const companies = d.production_companies || [];
   const networks = d.networks || [];
   const studioSrc = reel.mediaType==="tv" ? (networks[0]||companies[0]) : companies[0];
+  let studio = studioSrc ? { id: studioSrc.id, name: studioSrc.name, logoPath: studioSrc.logo_path||null, kind: networks[0]&&studioSrc===networks[0]?"network":"company" } : null;
+  if (studio) studio = await colorLogo(studio);
   return {
     ...reel,
     overview: d.overview || reel.overview,
     runtime: d.runtime || (d.episode_run_time||[])[0] || reel.runtime,
     trailerKey,
-    studio: studioSrc ? { id: studioSrc.id, name: studioSrc.name, logoPath: studioSrc.logo_path||null, kind: networks[0]&&studioSrc===networks[0]?"network":"company" } : null,
+    studio,
     cast: ((d.credits&&d.credits.cast)||[]).slice(0,8).map(c=>({id:c.id,name:c.name,character:c.character||"",profilePath:c.profile_path||null})),
     hydrated: true,
   };
@@ -996,8 +1030,9 @@ function slideHTML(r,i){
       </div>
     </div>
     <div class="rail">
+      ${r.posterPath?`<div class="rail-art"><img src="${IMG.posterThumb+r.posterPath}" alt=""></div>`:""}
       <button class="studio" data-studio='${escAttr(JSON.stringify(r.studio||{}))}' ${r.studio?"":"disabled"}>
-        <span class="mark">${r.studio&&r.studio.logoPath?`<img src="${IMG.logo+r.studio.logoPath}" alt="">`:`${esc((r.studio&&r.studio.name||r.title)[0]||"B")}`}</span>
+        <span class="mark ${r.studio&&r.studio.logoDark?"dark":""}">${r.studio&&r.studio.logoPath?`<img src="${IMG.logo+r.studio.logoPath}" alt="">`:`${esc((r.studio&&r.studio.name||r.title)[0]||"B")}`}</span>
         <small>${esc(r.studio&&r.studio.name||"Studio")}</small>
       </button>
       <div>
@@ -1291,6 +1326,8 @@ function syncTrailers(){
     if (shouldPlay) {
       if (!existing || existing.dataset.key!==item.trailerKey) {
         slot.innerHTML = `<div class="trailer-cover"><iframe data-key="${item.trailerKey}" src="${ytEmbed(item.trailerKey, store.muted)}" allow="autoplay; encrypted-media; picture-in-picture" title="trailer"></iframe></div>`;
+        const cover = slot.querySelector(".trailer-cover");
+        setTimeout(()=>cover && cover.classList.add("ready"), 2000);
       } else {
         ytCommand("playVideo", existing);
         ytCommand(store.muted?"mute":"unMute", existing);
@@ -1634,7 +1671,10 @@ async function hydrateAround(i){
           st.setAttribute("data-studio", JSON.stringify(next.studio));
           st.querySelector("small").textContent = next.studio.name;
           const mark = st.querySelector(".mark");
-          if (mark && next.studio.logoPath) mark.innerHTML = `<img src="${IMG.logo+next.studio.logoPath}" alt="">`;
+          if (mark && next.studio.logoPath) {
+            mark.classList.toggle("dark", !!next.studio.logoDark);
+            mark.innerHTML = `<img src="${IMG.logo+next.studio.logoPath}" alt="">`;
+          }
         }
       }
     } catch { if (real) real.hydrated=true; }
