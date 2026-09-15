@@ -80,13 +80,9 @@ header.top > * { pointer-events:auto; }
   background: color-mix(in oklab, var(--elevated) 80%, transparent); color:var(--muted);
 }
 .lane.on { background:var(--fg); color:var(--bg); }
-.year-wrap, .genre-wrap { position:relative; flex:none; }
-.genre-inline { display:none; }
-@media (min-width: 820px) {
-  .genre-wrap { display:none; }
-  .genre-inline { display:flex; gap:6px; }
-}
-.genre-menu { display:flex; flex-wrap:wrap; gap:6px; width:min(78vw, 280px); }
+.year-wrap, .genre-wrap, .studio-wrap { position:relative; flex:none; }
+.genre-inline { display:none !important; }
+.genre-sheet .lane, .studio-sheet .lane { margin:0; }
 .year-btn {
   height:32px; padding:0 12px; border-radius:999px; font-size:12px; font-weight:600;
   background: color-mix(in oklab, var(--elevated) 80%, transparent); color:var(--muted);
@@ -94,7 +90,16 @@ header.top > * { pointer-events:auto; }
 }
 .year-btn.on { background:var(--fg); color:var(--bg); }
 .year-menu {
-  position:fixed; top: max(92px, calc(env(safe-area-inset-top) + 78px)); left:12px; z-index:90;
+  display:none; position:fixed; top: max(88px, calc(env(safe-area-inset-top) + 72px)); left:12px; z-index:90;
+  width:min(92vw, 380px);
+  background: color-mix(in oklab, var(--surface) 96%, transparent);
+  backdrop-filter: blur(18px); border:1px solid var(--line); border-radius:16px;
+  padding:12px; max-height:min(70dvh, 520px); overflow:auto;
+  box-shadow: 0 18px 50px rgba(0,0,0,.55);
+}
+.year-menu.open, .genre-sheet.open, .studio-sheet.open { display:block; }
+.genre-sheet, .studio-sheet {
+  display:none; position:fixed; top: max(88px, calc(env(safe-area-inset-top) + 72px)); left:12px; z-index:90;
   width:min(92vw, 380px);
   background: color-mix(in oklab, var(--surface) 96%, transparent);
   backdrop-filter: blur(18px); border:1px solid var(--line); border-radius:16px;
@@ -165,7 +170,25 @@ header.top > * { pointer-events:auto; }
 .meta { position:absolute; left:14px; right:86px; bottom: max(18px, calc(env(safe-area-inset-bottom) + 12px)); z-index:4; pointer-events:none; }
 .meta button, .meta [data-open], .cast-row { pointer-events:auto; }
 .kicker { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; margin-bottom:6px; }
-.meta h2 { margin:0 0 8px; font-family:var(--font-display); font-size: clamp(1.7rem, 6vw, 2.4rem); line-height:.95; letter-spacing:-.03em; display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; }
+.meta h2 { margin:0 0 8px; font-family:var(--font-display); font-size: clamp(1.55rem, 5.6vw, 2.3rem); line-height:.95; letter-spacing:-.03em; display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.title-art {
+  width:46px; height:69px; border-radius:8px; overflow:hidden; flex:none;
+  border:1px solid var(--line); box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  background:var(--elevated); padding:0;
+}
+.title-art img { width:100%; height:100%; object-fit:cover; display:block; }
+.poster-view {
+  position:absolute; inset:0; z-index:70; background:rgba(0,0,0,.72);
+  display:grid; place-items:center; padding:24px 16px calc(20px + env(safe-area-inset-bottom));
+}
+.poster-view img {
+  max-width:min(86vw, 420px); max-height:78dvh; width:auto; height:auto;
+  border-radius:16px; box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+.poster-view .pv-close {
+  margin-top:14px; height:44px; padding:0 22px; border-radius:999px;
+  background:var(--accent); color:var(--accent-fg); font-weight:700;
+}
 .ep-chip {
   font-family:var(--font-sans); font-size:11px; font-weight:700; letter-spacing:.08em;
   padding:5px 10px; border-radius:999px; border:1px solid var(--line);
@@ -403,6 +426,7 @@ header.top > * { pointer-events:auto; }
 <body>
 <div class="app" id="app"></div>
 <script>
+const SITE = "https://bwreels.online";
 const TMDB = "https://api.themoviedb.org/3";
 const KEY = "129637a8869a61522af21b80f6eb5129";
 const IMG = {
@@ -450,6 +474,29 @@ const LANES = [
   {id:"horror",label:"Horror"},
   {id:"saved",label:"Saved"},
   {id:"history",label:"History"},
+];
+const GENRE_LANES = ["animation","action","comedy","horror"];
+const STUDIOS = [
+  {id:213, name:"Netflix", kind:"network"},
+  {id:49, name:"HBO", kind:"network"},
+  {id:2739, name:"Disney+", kind:"network"},
+  {id:1024, name:"Amazon", kind:"network"},
+  {id:2552, name:"Apple TV+", kind:"network"},
+  {id:4330, name:"Paramount+", kind:"network"},
+  {id:453, name:"Hulu", kind:"network"},
+  {id:174, name:"Warner Bros.", kind:"company"},
+  {id:33, name:"Universal", kind:"company"},
+  {id:4, name:"Paramount", kind:"company"},
+  {id:2, name:"Disney", kind:"company"},
+  {id:5, name:"Columbia", kind:"company"},
+  {id:25, name:"20th Century", kind:"company"},
+  {id:420, name:"Marvel", kind:"company"},
+  {id:3, name:"Pixar", kind:"company"},
+  {id:521, name:"DreamWorks", kind:"company"},
+  {id:41077, name:"A24", kind:"company"},
+  {id:1632, name:"Lionsgate", kind:"company"},
+  {id:34, name:"Sony", kind:"company"},
+  {id:332, name:"BBC", kind:"company"},
 ];
 const YEAR_MIN = 2000;
 const YEAR_NOW = new Date().getFullYear();
@@ -821,6 +868,8 @@ const state = {
   yearFilter: null,
   yearOpen: false,
   genreOpen: false,
+  studioOpen: false,
+  posterView: null,
   welcome: loadJSON("bwhs-welcome", { hide:false, later:false }),
   trailerTip: loadJSON("bwhs-trailer-tip", { hide:false }),
 };
@@ -904,12 +953,15 @@ function render(){
     ${state.watching ? playerHTML(state.watching) : ""}
     ${state.epPick ? epsHTML(state.epPick) : ""}
     ${!isPhone() && !localStorage.getItem("bwhs-keys-tip") && state.overlay==="none" && !state.watching ? `<div class="tip" id="keyTip">On desktop use <kbd>↑</kbd> <kbd>↓</kbd> to move through reels. Click anywhere to dismiss.</div>` : ""}
-    ${state.yearOpen ? yearSheetHTML() : ""}
+    ${yearSheetHTML()}
+    ${genreSheetHTML()}
+    ${studioSheetHTML()}
     ${shouldShowWelcome() ? welcomeHTML() : (shouldShowTrailerTip() ? trailerTipHTML() : "")}
   `;
   bind();
   pushAppHash();
   if (state.watching) requestAnimationFrame(()=>loadPlayerStream());
+  else if (!state.posterView) requestAnimationFrame(()=>syncTrailers());
 }
 
 function logoSVG(){
@@ -935,12 +987,50 @@ function shouldShowTrailerTip(){
   return state.overlay==="none" && !state.watching && !state.boot;
 }
 function yearSheetHTML(){
-  return `<div class="year-menu" id="yearMenu">
+  return `<div class="year-menu ${state.yearOpen?"open":""}" id="yearMenu">
     <div class="sec" style="margin-top:0">Pick a year</div>
     <div class="year-grid">
       <button type="button" data-year="all" class="${!state.yearFilter?"on":""}">All</button>
       ${ALL_YEARS.map(y=>`<button type="button" data-year="${y}" class="${state.yearFilter===y?"on":""}">${y}</button>`).join("")}
     </div>
+    <button type="button" class="cta" id="yearClose" style="width:100%;margin-top:12px;height:42px">Close</button>
+  </div>`;
+}
+function genreSheetHTML(){
+  return `<div class="genre-sheet ${state.genreOpen?"open":""}" id="genreMenu">
+    <div class="sec" style="margin-top:0">Genres</div>
+    <div class="eps-wrap">
+      ${LANES.filter(l=>GENRE_LANES.includes(l.id)).map(l=>`<button type="button" class="lane ${state.lane===l.id?"on":""}" data-genre="${l.id}">${l.label}</button>`).join("")}
+    </div>
+    <button type="button" class="cta" id="genreClose" style="width:100%;margin-top:12px;height:42px">Close</button>
+  </div>`;
+}
+function studioSheetHTML(){
+  return `<div class="studio-sheet ${state.studioOpen?"open":""}" id="studioMenu">
+    <div class="sec" style="margin-top:0">Studios & networks</div>
+    <div class="eps-wrap">
+      ${STUDIOS.map(s=>`<button type="button" class="lane" data-pick-studio='${escAttr(JSON.stringify(s))}'>${esc(s.name)}</button>`).join("")}
+    </div>
+    <button type="button" class="cta" id="studioClose" style="width:100%;margin-top:12px;height:42px">Close</button>
+  </div>`;
+}
+function showPoster(r){
+  if (!r) return;
+  state.posterView = r;
+  $("#posterView")?.remove();
+  app.insertAdjacentHTML("beforeend", posterViewHTML(r));
+  $("#posterClose")?.addEventListener("click", hidePoster);
+  $("#posterView")?.addEventListener("click", e=>{ if (e.target.id==="posterView") hidePoster(); });
+}
+function hidePoster(){
+  state.posterView = null;
+  $("#posterView")?.remove();
+}
+function posterViewHTML(r){
+  const src = r.posterPath ? IMG.poster+r.posterPath : (r.backdropPath ? IMG.backdropHd+r.backdropPath : "");
+  return `<div class="poster-view" id="posterView">
+    ${src?`<img src="${src}" alt="${escAttr(r.title||"")}">`:""}
+    <button type="button" class="pv-close" id="posterClose">✕ Close</button>
   </div>`;
 }
 function trailerTipHTML(){
@@ -990,13 +1080,10 @@ function headerHTML(){
       </div>
       ${LANES.filter(l=>["foryou","movies","shows","saved","history"].includes(l.id)).map(l=>`<button class="lane ${state.lane===l.id?"on":""}" data-lane="${l.id}">${l.label}</button>`).join("")}
       <div class="genre-wrap">
-        <button class="year-btn ${["animation","action","comedy","horror"].includes(state.lane)?"on":""}" id="genreBtn">${["animation","action","comedy","horror"].includes(state.lane)?LANES.find(l=>l.id===state.lane).label:"Genres"} ▾</button>
-        ${state.genreOpen ? `<div class="year-menu genre-menu" id="genreMenu">
-          ${LANES.filter(l=>["animation","action","comedy","horror"].includes(l.id)).map(l=>`<button class="lane ${state.lane===l.id?"on":""}" data-lane="${l.id}">${l.label}</button>`).join("")}
-        </div>` : ""}
+        <button type="button" class="year-btn ${GENRE_LANES.includes(state.lane)?"on":""}" id="genreBtn">${GENRE_LANES.includes(state.lane)?LANES.find(l=>l.id===state.lane).label:"Genres"} ▾</button>
       </div>
-      <div class="genre-inline">
-        ${LANES.filter(l=>["animation","action","comedy","horror"].includes(l.id)).map(l=>`<button class="lane ${state.lane===l.id?"on":""}" data-lane="${l.id}">${l.label}</button>`).join("")}
+      <div class="studio-wrap">
+        <button type="button" class="year-btn" id="studioBtn">Studios ▾</button>
       </div>
     </div>
   </header>`;
@@ -1020,7 +1107,7 @@ function slideHTML(r,i){
     <div class="veil"></div>
     <div class="meta">
       <div class="kicker">${r.mediaType==="tv"?"Series":"Film"} ${r.year? "· "+r.year:""} ${r.rating? "· "+r.rating.toFixed(1):""}</div>
-      <h2><span data-open="${i}">${esc(r.title)}</span>${r.mediaType==="tv"?`<button class="ep-chip" data-eps="${i}">[S${String(se.s).padStart(2,"0")}E${String(se.e).padStart(2,"0")}]</button>`:""}</h2>
+      <h2>${r.posterPath?`<button type="button" class="title-art" data-poster="${i}" aria-label="Open cover art"><img src="${IMG.posterThumb+r.posterPath}" alt=""></button>`:""}<span data-open="${i}">${esc(r.title)}</span>${r.mediaType==="tv"?`<button class="ep-chip" data-eps="${i}">[S${String(se.s).padStart(2,"0")}E${String(se.e).padStart(2,"0")}]</button>`:""}</h2>
       <p>${esc(r.overview||"")}</p>
       <div class="cast-row">
         ${(r.cast||[]).slice(0,6).map(p=>`<button class="cast" data-person='${escAttr(JSON.stringify(p))}'>
@@ -1030,7 +1117,6 @@ function slideHTML(r,i){
       </div>
     </div>
     <div class="rail">
-      ${r.posterPath?`<div class="rail-art"><img src="${IMG.posterThumb+r.posterPath}" alt=""></div>`:""}
       <button class="studio" data-studio='${escAttr(JSON.stringify(r.studio||{}))}' ${r.studio?"":"disabled"}>
         <span class="mark ${r.studio&&r.studio.logoDark?"dark":""}">${r.studio&&r.studio.logoPath?`<img src="${IMG.logo+r.studio.logoPath}" alt="">`:`${esc((r.studio&&r.studio.name||r.title)[0]||"B")}`}</span>
         <small>${esc(r.studio&&r.studio.name||"Studio")}</small>
@@ -1046,22 +1132,46 @@ function slideHTML(r,i){
     </div>
   </article>`;
 }
+function searchResultsInner(){
+  if (!state.searchQ.trim()) {
+    return `
+      <div class="sec">Recent searches</div>
+      ${store.searches.length? store.searches.map(s=>`<button class="chip" data-recent="${escAttr(s)}">${esc(s)}</button>`).join("")+`<button class="chip" id="clearSearches">Clear</button>` : `<p class="empty">Your searches will live here.</p>`}
+    `;
+  }
+  return `
+    ${state.searchBusy?`<div class="spin"></div>`:""}
+    ${state.searchPeople.length? `<div class="sec">Stars</div><div class="people">${state.searchPeople.map(p=>`<button class="cast" data-person='${escAttr(JSON.stringify({id:p.id,name:p.name,character:"",profilePath:p.profilePath}))}'>${p.profilePath?`<img src="${IMG.profile+p.profilePath}">`:`<span class="ph">${esc(p.name[0])}</span>`}<span>${esc(p.name)}</span></button>`).join("")}</div>`:""}
+    ${state.searchTitles.length? `<div class="sec">Titles</div>${state.searchTitles.map((t,i)=>rowHTML(t,i)).join("")}`:""}
+    ${!state.searchBusy && !state.searchTitles.length && !state.searchPeople.length ? `<p class="empty">No matches for “${esc(state.searchQ)}”.</p>`:""}
+  `;
+}
+function bindSearchHits(){
+  document.querySelectorAll("[data-recent]").forEach(b=>b.addEventListener("click", ()=>{
+    state.searchQ=b.dataset.recent;
+    const inp=$("#q"); if(inp) inp.value=state.searchQ;
+    runSearch(state.searchQ);
+  }));
+  $("#clearSearches")?.addEventListener("click", ()=>{ store.searches=[]; persistLists(); paintSearchResults(); });
+  document.querySelectorAll(".overlay [data-open-title]").forEach(b=>b.addEventListener("click", ()=>{
+    const reel = JSON.parse(b.getAttribute("data-open-title"));
+    openReelPreview(reel);
+  }));
+  document.querySelectorAll(".overlay [data-person]").forEach(b=>b.addEventListener("click", ()=>openPerson(JSON.parse(b.getAttribute("data-person")))));
+}
+function paintSearchResults(){
+  const box = $("#searchResults");
+  if (!box) return;
+  box.innerHTML = searchResultsInner();
+  bindSearchHits();
+}
 function searchHTML(){
   return `<section class="overlay">
     <header class="ov-head">
       <button class="icon-btn" id="closeOv">${icon("back")}</button>
-      <div class="search-wrap">${icon("search")}<input id="q" value="${escAttr(state.searchQ)}" placeholder="Search films, shows, stars" autofocus></div>
+      <div class="search-wrap">${icon("search")}<input id="q" value="${escAttr(state.searchQ)}" placeholder="Search films, shows, stars" autocomplete="off" autocorrect="off" spellcheck="false"></div>
     </header>
-    <div class="ov-body">
-      ${!state.searchQ.trim() ? `
-        <div class="sec">Recent searches</div>
-        ${store.searches.length? store.searches.map(s=>`<button class="chip" data-recent="${escAttr(s)}">${esc(s)}</button>`).join("")+`<button class="chip" id="clearSearches">Clear</button>` : `<p class="empty">Your searches will live here.</p>`}
-      `: ""}
-      ${state.searchBusy?`<div class="spin"></div>`:""}
-      ${state.searchPeople.length? `<div class="sec">Stars</div><div class="people">${state.searchPeople.map(p=>`<button class="cast" data-person='${escAttr(JSON.stringify({id:p.id,name:p.name,character:"",profilePath:p.profilePath}))}'>${p.profilePath?`<img src="${IMG.profile+p.profilePath}">`:`<span class="ph">${esc(p.name[0])}</span>`}<span>${esc(p.name)}</span></button>`).join("")}</div>`:""}
-      ${state.searchTitles.length? `<div class="sec">Titles</div>${state.searchTitles.map((t,i)=>rowHTML(t,i)).join("")}`:""}
-      ${state.searchQ.trim() && !state.searchBusy && !state.searchTitles.length && !state.searchPeople.length ? `<p class="empty">No matches for “${esc(state.searchQ)}”.</p>`:""}
-    </div>
+    <div class="ov-body" id="searchResults">${searchResultsInner()}</div>
   </section>`;
 }
 function rowHTML(t){
@@ -1342,15 +1452,17 @@ function syncTrailers(){
   });
 }
 
+function shareUrl(reel){
+  if (!reel) return SITE;
+  if (reel.mediaType==="tv") return `${SITE}/#/watch/tv/${reel.id}/${reel.lastSE?.s||1}/${reel.lastSE?.e||1}`;
+  return `${SITE}/#/watch/movie/${reel.id}`;
+}
 async function shareReel(reel){
   if (!reel) return;
   const art = reel.posterPath ? IMG.poster+reel.posterPath : (reel.backdropPath ? IMG.backdropHd+reel.backdropPath : "");
-  const trailer = reel.trailerKey ? `https://youtu.be/${reel.trailerKey}` : "";
-  const tmdbUrl = reel.mediaType==="tv"
-    ? `https://www.themoviedb.org/tv/${reel.id}`
-    : `https://www.themoviedb.org/movie/${reel.id}`;
-  const text = `${reel.title}${reel.year?" ("+reel.year+")":""}${trailer?"\nTrailer: "+trailer:""}\n${tmdbUrl}`;
-  const payload = { title: reel.title, text, url: trailer || tmdbUrl };
+  const url = shareUrl(reel);
+  const text = `Watch ${reel.title}${reel.year?" ("+reel.year+")":""} on BWHS Reels\n${url}`;
+  const payload = { title: `${reel.title} · BWHS Reels`, text, url };
   try {
     if (navigator.share) {
       if (art && navigator.canShare) {
@@ -1448,10 +1560,60 @@ function bind(){
     e.stopPropagation();
     state.yearOpen = !state.yearOpen;
     state.genreOpen = false;
-    render();
+    state.studioOpen = false;
+    $("#genreMenu")?.classList.remove("open");
+    $("#studioMenu")?.classList.remove("open");
+    const menu = $("#yearMenu");
+    if (menu) menu.classList.toggle("open", state.yearOpen);
+  });
+  $("#yearClose")?.addEventListener("click", e=>{
+    e.stopPropagation();
+    state.yearOpen = false;
+    $("#yearMenu")?.classList.remove("open");
   });
   $("#yearMenu")?.addEventListener("click", e=> e.stopPropagation());
-  $("#genreBtn")?.addEventListener("click", e=>{ e.stopPropagation(); state.genreOpen=!state.genreOpen; state.yearOpen=false; render(); });
+  function closeSheets(){
+    state.yearOpen=false; state.genreOpen=false; state.studioOpen=false;
+    $("#yearMenu")?.classList.remove("open");
+    $("#genreMenu")?.classList.remove("open");
+    $("#studioMenu")?.classList.remove("open");
+  }
+  $("#genreBtn")?.addEventListener("click", e=>{
+    e.preventDefault(); e.stopPropagation();
+    state.genreOpen = !state.genreOpen;
+    state.yearOpen = false; state.studioOpen = false;
+    $("#yearMenu")?.classList.remove("open");
+    $("#studioMenu")?.classList.remove("open");
+    $("#genreMenu")?.classList.toggle("open", state.genreOpen);
+  });
+  $("#genreClose")?.addEventListener("click", e=>{ e.stopPropagation(); closeSheets(); });
+  $("#genreMenu")?.addEventListener("click", e=> e.stopPropagation());
+  document.querySelectorAll("[data-genre]").forEach(b=>b.addEventListener("click", e=>{
+    e.stopPropagation();
+    closeSheets();
+    loadLane(b.dataset.genre);
+  }));
+  $("#studioBtn")?.addEventListener("click", e=>{
+    e.preventDefault(); e.stopPropagation();
+    state.studioOpen = !state.studioOpen;
+    state.yearOpen = false; state.genreOpen = false;
+    $("#yearMenu")?.classList.remove("open");
+    $("#genreMenu")?.classList.remove("open");
+    $("#studioMenu")?.classList.toggle("open", state.studioOpen);
+  });
+  $("#studioClose")?.addEventListener("click", e=>{ e.stopPropagation(); closeSheets(); });
+  $("#studioMenu")?.addEventListener("click", e=> e.stopPropagation());
+  document.querySelectorAll("[data-pick-studio]").forEach(b=>b.addEventListener("click", e=>{
+    e.stopPropagation();
+    closeSheets();
+    try { openStudio(JSON.parse(b.getAttribute("data-pick-studio"))); } catch {}
+  }));
+  document.querySelectorAll("[data-poster]").forEach(b=>b.addEventListener("click", e=>{
+    e.stopPropagation();
+    showPoster(state.items[+b.dataset.poster]);
+  }));
+  $("#posterClose")?.addEventListener("click", hidePoster);
+  $("#posterView")?.addEventListener("click", e=>{ if (e.target.id==="posterView") hidePoster(); });
   document.querySelectorAll("[data-year]").forEach(b=>b.addEventListener("click", e=>{
     e.stopPropagation();
     const v = b.dataset.year;
@@ -1566,8 +1728,7 @@ function bind(){
   document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click", ()=>{ state.synopsis=state.items[+b.dataset.open]; state.overlay="synopsis"; render(); }));
   document.querySelectorAll("[data-open-title]").forEach(b=>b.addEventListener("click", ()=>{
     const reel = JSON.parse(b.getAttribute("data-open-title"));
-    state.overlay="none";
-    openWatch(reel);
+    openReelPreview(reel);
   }));
   document.querySelectorAll("[data-person]").forEach(b=>b.addEventListener("click", ()=>openPerson(JSON.parse(b.getAttribute("data-person")))));
   document.querySelectorAll("[data-studio]").forEach(b=>b.addEventListener("click", ()=>{
@@ -1620,16 +1781,17 @@ function bind(){
     q.addEventListener("input", e=>{
       state.searchQ=e.target.value;
       clearTimeout(window.__qs);
-      window.__qs=setTimeout(()=>runSearch(state.searchQ), 180);
+      window.__qs=setTimeout(()=>runSearch(state.searchQ), 260);
     });
     q.addEventListener("keydown", e=>{ if(e.key==="Enter"){ addSearch(state.searchQ); persistLists(); }});
+    requestAnimationFrame(()=>{ q.focus(); const n=q.value.length; try{ q.setSelectionRange(n,n);}catch{} });
   }
+  bindSearchHits();
   const feed = $("#feed");
   if (feed){
     feed.addEventListener("scroll", onScroll, {passive:true});
     if (state.restoreY) feed.scrollTop = state.restoreY;
   }
-  requestAnimationFrame(()=>syncTrailers());
 }
 
 function onScroll(e){
@@ -1760,21 +1922,44 @@ function bindNewSlides(from){
 async function runSearch(q){
   const t=q.trim();
   state.searchQ=q;
-  if(!t){ state.searchTitles=[]; state.searchPeople=[]; render(); return; }
-  state.searchBusy=true; render();
+  if(!t){ state.searchTitles=[]; state.searchPeople=[]; state.searchBusy=false; paintSearchResults(); return; }
+  state.searchBusy=true;
+  paintSearchResults();
+  const token = (window.__searchTok = (window.__searchTok||0)+1);
   try {
     const [media, people] = await Promise.all([
       tmdb("/search/multi",{query:t}),
       tmdb("/search/person",{query:t}),
     ]);
+    if (token !== window.__searchTok) return;
     state.searchTitles = (media.results||[]).filter(x=>x.media_type==="movie"||x.media_type==="tv").map(x=>mapItem(x,x.media_type));
     state.searchPeople = (people.results||[]).slice(0,12).map(p=>({id:p.id,name:p.name,profilePath:p.profile_path||null}));
     addSearch(t);
-  } catch { state.searchTitles=[]; state.searchPeople=[]; }
-  state.searchBusy=false; render();
-  const inp=$("#q"); if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
+  } catch { if (token === window.__searchTok) { state.searchTitles=[]; state.searchPeople=[]; } }
+  if (token !== window.__searchTok) return;
+  state.searchBusy=false;
+  paintSearchResults();
 }
 
+function openReelPreview(reel){
+  if (!reel) return;
+  state.overlay="none";
+  state.watching=null;
+  state.epPick=null;
+  state.posterView=null;
+  state.yearOpen=false;
+  const k = reel.mediaType+"-"+reel.id;
+  let idx = state.items.findIndex(x => x.mediaType+"-"+x.id === k);
+  if (idx < 0) {
+    state.items = [reel, ...state.items];
+    idx = 0;
+  }
+  state.active = idx;
+  render();
+  const feed = $("#feed");
+  if (feed) feed.scrollTop = idx * (feed.clientHeight || window.innerHeight);
+  hydrateAround(idx);
+}
 function openWatch(reel){
   if(!reel) return;
   addHistory(reel);
@@ -1851,6 +2036,8 @@ async function openStudio(s){
     image: s.logoPath ? IMG.logo+s.logoPath : null
   };
   render();
+  await loadCatalogMore();
+  await loadCatalogMore();
   await loadCatalogMore();
 }
 async function loadCatalogMore(){
