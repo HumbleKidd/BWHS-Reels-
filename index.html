@@ -885,16 +885,19 @@ async function fetchLane(lane, yearHint) {
   let rows = [];
   try {
     if (lane==="popular") {
-      const pages = [1,2];
-      const jobs = [];
-      pages.forEach(page=>{
-        jobs.push(tmdb("/trending/movie/day", { page }));
-        jobs.push(tmdb("/trending/movie/week", { page }));
-        jobs.push(tmdb("/movie/now_playing", { page, region:"US" }));
-        jobs.push(tmdb("/movie/upcoming", { page, region:"US" }));
-        jobs.push(tmdb("/movie/popular", { page, region:"US" }));
-      });
-      if (y) jobs.push(tmdb("/discover/movie", { page:1, sort_by:"popularity.desc", primary_release_year:y, with_original_language:"en", include_adult:false }));
+      const rp = () => 1 + Math.floor(Math.random()*5);
+      const jobs = [
+        tmdb("/trending/movie/day", { page: rp() }),
+        tmdb("/trending/movie/week", { page: rp() }),
+        tmdb("/movie/now_playing", { page: rp(), region:"US" }),
+        tmdb("/movie/upcoming", { page: rp(), region:"US" }),
+        tmdb("/movie/popular", { page: rp(), region:"US" }),
+        tmdb("/discover/movie", { page: rp(), sort_by:"popularity.desc", primary_release_year: YEAR_NOW, with_original_language:"en", include_adult:false, "vote_count.gte": 20 }),
+        tmdb("/discover/movie", { page: rp(), sort_by:"popularity.desc", primary_release_year: YEAR_NOW-1, with_original_language:"en", include_adult:false, "vote_count.gte": 40 }),
+        tmdb("/discover/movie", { page: rp(), sort_by:"popularity.desc", "primary_release_date.gte": `${YEAR_NOW}-01-01`, "primary_release_date.lte": `${YEAR_MAX}-12-31`, with_original_language:"en", include_adult:false }),
+      ];
+      if (y) jobs.push(tmdb("/discover/movie", { page: rp(), sort_by:"popularity.desc", primary_release_year:y, with_original_language:"en", include_adult:false }));
+      if (g) jobs.push(tmdb("/discover/movie", { page: rp(), sort_by:"popularity.desc", with_genres:g, with_original_language:"en", include_adult:false, primary_release_year: YEAR_NOW }));
       const packs = await Promise.allSettled(jobs);
       const bag = [];
       packs.forEach(p=>{
@@ -914,8 +917,7 @@ async function fetchLane(lane, yearHint) {
       let filtered = rows.filter(r => preferEn(r) && knownTitle(r));
       if (y) filtered = filtered.filter(r => String(r.year)===String(y));
       if (g) filtered = filtered.filter(r => (r.genreIds||[]).includes(Number(g)));
-      filtered.sort((a,b)=> (b.popularity||0)-(a.popularity||0) || (b.voteCount||0)-(a.voteCount||0));
-      rows = filtered.length ? filtered : rows.filter(knownTitle);
+      rows = shuffle(filtered.length ? filtered : rows.filter(knownTitle));
     } else if (lane==="movies") {
       rows = await fillDiscover("movie", { year:y, lane:"movies", with_genres:g||undefined });
     } else if (lane==="shows") {
@@ -945,8 +947,8 @@ async function fetchLane(lane, yearHint) {
     }
   } catch { rows = []; }
   let cleaned = rows.filter(knownTitle);
-  let out = lane==="popular" ? cleaned : shuffle(cleaned);
-  if (!out.length && rows.length) out = lane==="popular" ? rows.filter(r => r.posterPath || r.backdropPath) : shuffle(rows.filter(r => r.posterPath || r.backdropPath));
+  let out = shuffle(cleaned);
+  if (!out.length && rows.length) out = shuffle(rows.filter(r => r.posterPath || r.backdropPath));
   if (!out.length) {
     try {
       const fb = await tmdb("/trending/all/week", { page: 1 });
@@ -2106,23 +2108,13 @@ async function loadLane(id){
     const batches = await Promise.all(jobs);
     const seen = new Set();
     const bag = batches.flat();
-    if (id !== "popular") {
-      const salted = shuffle(bag).map((r,i)=>({r, s: Math.random() + ((r.id||0)%97)/1000 + i*0.0001}));
-      salted.sort((a,b)=>a.s-b.s);
-      state.items = [];
-      for (const {r} of salted) {
-        const k=r.mediaType+r.id;
-        if (seen.has(k)) continue;
-        seen.add(k); state.items.push(r);
-      }
-    } else {
-      bag.sort((a,b)=> (b.popularity||0)-(a.popularity||0));
-      state.items = [];
-      for (const r of bag) {
-        const k=r.mediaType+r.id;
-        if (seen.has(k)) continue;
-        seen.add(k); state.items.push(r);
-      }
+    const salted = shuffle(bag).map((r,i)=>({r, s: Math.random()}));
+    salted.sort((a,b)=>a.s-b.s);
+    state.items = [];
+    for (const {r} of salted) {
+      const k=r.mediaType+r.id;
+      if (seen.has(k)) continue;
+      seen.add(k); state.items.push(r);
     }
   } catch(e){ state.items=[]; }
   state.boot=false;
