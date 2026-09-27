@@ -161,15 +161,19 @@ header.top > * { pointer-events:auto; }
 .slide { height:100dvh; scroll-snap-align:start; scroll-snap-stop:always; position:relative; overflow:hidden; }
 .stage { position:absolute; inset:0; }
 .slide img.bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scale(1.06); }
-.slide.active img.bg { animation: ken 22s linear alternate infinite; }
+.slide.active img.bg { animation: ken 12s linear alternate infinite; }
 .trailer-cover { position:absolute; inset:0; overflow:hidden; background:transparent; }
 .trailer-cover iframe {
   position:absolute; top:50%; left:50%; border:0;
   height:100%; width:177.78%; min-width:100%; min-height:56.25vw;
   transform:translate(-50%,-50%);
-  opacity:0; transition: opacity .18s ease;
+  opacity:0; transition: opacity .08s ease;
 }
 .trailer-cover.ready iframe { opacity:1; }
+.release-banner{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:color-mix(in oklab, var(--elevated) 80%, transparent);font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--accent);max-width:100%;}
+.release-banner.hot{color:#ffd56a}
+.hot-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:#ff6b7a;color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.star-chip{color:#ffd56a;font-weight:800}
 .trailer-hit {
   position:absolute; inset:0; z-index:2;
 }
@@ -181,7 +185,7 @@ header.top > * { pointer-events:auto; }
   width:64px; height:64px; border-radius:50%; background:rgba(0,0,0,.45);
   border:1px solid var(--line); display:grid; place-items:center; backdrop-filter:blur(8px);
 }
-@keyframes ken { from{transform:scale(1.06)} to{transform:scale(1.16)} }
+@keyframes ken { from{transform:scale(1.03)} to{transform:scale(1.08)} }
 .veil { position:absolute; inset:0; background:
   linear-gradient(to top, color-mix(in oklab, var(--bg) 92%, transparent) 0%, transparent 42%),
   linear-gradient(to right, color-mix(in oklab, var(--bg) 55%, transparent), transparent 40%);
@@ -609,6 +613,8 @@ function mapItem(it, type) {
     posterPath: it.poster_path || null,
     backdropPath: it.backdrop_path || null,
     year: (it.release_date || it.first_air_date || "").slice(0,4),
+    releaseDate: it.release_date || it.first_air_date || "",
+    status: it.status || "",
     rating: it.vote_average || 0,
     voteCount: it.vote_count || 0,
     popularity: it.popularity || 0,
@@ -644,9 +650,36 @@ function ytEmbed(key, muted){
   const p = new URLSearchParams({
     autoplay:"1", mute: muted?"1":"0", controls:"0", rel:"0", modestbranding:"1",
     playsinline:"1", enablejsapi:"1", loop:"1", playlist:key, fs:"0",
-    iv_load_policy:"3", disablekb:"1", cc_load_policy:"0"
+    iv_load_policy:"3", disablekb:"1", cc_load_policy:"0", origin: location.origin
   });
-  return `https://www.youtube.com/embed/${key}?${p}`;
+  return `https://www.youtube-nocookie.com/embed/${key}?${p}`;
+}
+function ytSetRate(frame, rate){
+  const frames = frame ? [frame] : document.querySelectorAll(".trailer-cover iframe");
+  frames.forEach(f=>{
+    try { f.contentWindow?.postMessage(JSON.stringify({event:"command",func:"setPlaybackRate",args:[rate||1.15]}),"*"); } catch {}
+  });
+}
+function isUnreleased(r){
+  const raw = r && (r.releaseDate || "");
+  if (!raw || raw.length < 8) return false;
+  const d = new Date(raw + (raw.length===10 ? "T00:00:00" : ""));
+  if (Number.isNaN(d.getTime())) return false;
+  const today = new Date(); today.setHours(0,0,0,0);
+  return d > today;
+}
+function fmtRelease(r){
+  const raw = (r && r.releaseDate) || "";
+  if (!raw) return r && r.year ? String(r.year) : "";
+  try {
+    const d = new Date(raw + (raw.length===10 ? "T00:00:00" : ""));
+    if (Number.isNaN(d.getTime())) return raw;
+    return d.toLocaleDateString("en-US", { year:"numeric", month:"short", day:"numeric" });
+  } catch { return raw; }
+}
+function isHotTitle(r){
+  if (!r) return false;
+  return (r.popularity||0) >= 80 || (r.voteCount||0) >= 1200 || (r.rating||0) >= 7.6;
 }
 const trailerCache = loadJSON("bwhs-trailer-keys", {});
 function saveTrailerCache(){
@@ -739,10 +772,18 @@ async function hydrate(reel) {
   const studioSrc = reel.mediaType==="tv" ? (networks[0]||companies[0]) : companies[0];
   let studio = studioSrc ? { id: studioSrc.id, name: studioSrc.name, logoPath: studioSrc.logo_path||null, kind: networks[0]&&studioSrc===networks[0]?"network":"company" } : null;
   if (studio) studio = await colorLogo(studio);
+  const releaseDate = d.release_date || d.first_air_date || reel.releaseDate || "";
   return {
     ...reel,
     overview: d.overview || reel.overview,
     runtime: d.runtime || (d.episode_run_time||[])[0] || reel.runtime,
+    releaseDate,
+    year: (releaseDate||reel.year||"").slice(0,4) || reel.year,
+    status: d.status || reel.status || "",
+    rating: d.vote_average || reel.rating,
+    voteCount: d.vote_count || reel.voteCount,
+    popularity: d.popularity || reel.popularity,
+    originalLanguage: d.original_language || reel.originalLanguage,
     trailerKey,
     studio,
     cast: ((d.credits&&d.credits.cast)||[]).slice(0,8).map(c=>({id:c.id,name:c.name,character:c.character||"",profilePath:c.profile_path||null})),
@@ -844,10 +885,37 @@ async function fetchLane(lane, yearHint) {
   let rows = [];
   try {
     if (lane==="popular") {
-      const year = y || YEAR_NOW;
-      const which = Math.random() > 0.45 ? "movie" : "tv";
-      rows = await fillDiscover(which, { year, lane:"popular", with_genres:g||undefined });
-      if (y) rows = rows.filter(r => String(r.year) === String(year));
+      const pages = [1,2];
+      const jobs = [];
+      pages.forEach(page=>{
+        jobs.push(tmdb("/trending/movie/day", { page }));
+        jobs.push(tmdb("/trending/movie/week", { page }));
+        jobs.push(tmdb("/movie/now_playing", { page, region:"US" }));
+        jobs.push(tmdb("/movie/upcoming", { page, region:"US" }));
+        jobs.push(tmdb("/movie/popular", { page, region:"US" }));
+      });
+      if (y) jobs.push(tmdb("/discover/movie", { page:1, sort_by:"popularity.desc", primary_release_year:y, with_original_language:"en", include_adult:false }));
+      const packs = await Promise.allSettled(jobs);
+      const bag = [];
+      packs.forEach(p=>{
+        if (p.status!=="fulfilled") return;
+        (p.value.results||[]).forEach(it=>{
+          if (it.media_type && it.media_type!=="movie") return;
+          bag.push(mapItem(it, "movie"));
+        });
+      });
+      rows = bag;
+      const preferEn = r => {
+        const lang = (r.originalLanguage||"").toLowerCase();
+        if (lang && lang!=="en" && lang!=="en-us") return false;
+        if ((r.genreIds||[]).includes(16) && lang==="ja") return false;
+        return true;
+      };
+      let filtered = rows.filter(r => preferEn(r) && knownTitle(r));
+      if (y) filtered = filtered.filter(r => String(r.year)===String(y));
+      if (g) filtered = filtered.filter(r => (r.genreIds||[]).includes(Number(g)));
+      filtered.sort((a,b)=> (b.popularity||0)-(a.popularity||0) || (b.voteCount||0)-(a.voteCount||0));
+      rows = filtered.length ? filtered : rows.filter(knownTitle);
     } else if (lane==="movies") {
       rows = await fillDiscover("movie", { year:y, lane:"movies", with_genres:g||undefined });
     } else if (lane==="shows") {
@@ -876,8 +944,9 @@ async function fetchLane(lane, yearHint) {
       if (!rows.length) rows = await fillDiscover(which==="movie"?"tv":"movie", { year:y, lane:"foryou", with_genres:g||undefined });
     }
   } catch { rows = []; }
-  let out = shuffle(rows.filter(knownTitle));
-  if (!out.length && rows.length) out = shuffle(rows.filter(r => r.posterPath || r.backdropPath));
+  let cleaned = rows.filter(knownTitle);
+  let out = lane==="popular" ? cleaned : shuffle(cleaned);
+  if (!out.length && rows.length) out = lane==="popular" ? rows.filter(r => r.posterPath || r.backdropPath) : shuffle(rows.filter(r => r.posterPath || r.backdropPath));
   if (!out.length) {
     try {
       const fb = await tmdb("/trending/all/week", { page: 1 });
@@ -1234,7 +1303,8 @@ function slideHTML(r,i){
     <div class="paused-badge"><i>${icon("play")}</i></div>
     <div class="veil"></div>
     <div class="meta">
-      <div class="kicker">${r.mediaType==="tv"?"Series":"Film"} ${r.year? "· "+r.year:""} ${r.rating? "· "+r.rating.toFixed(1):""}</div>
+      ${isUnreleased(r)?`<div class="release-banner">Keep an eye out. Released on: ${esc(fmtRelease(r))}</div>`:`<div class="release-banner">Ready to watch${r.releaseDate? " · "+esc(fmtRelease(r)):""}</div>`}
+      <div class="kicker">${r.mediaType==="tv"?"Series":"Film"} ${r.year? "· "+r.year:""} ${r.rating? `· <span class="star-chip">★ ${r.rating.toFixed(1)}</span>`:""} ${isHotTitle(r)?`<span class="hot-chip">HOT</span>`:""}</div>
       <h2>${r.posterPath?`<button type="button" class="title-art" data-poster="${i}" aria-label="Open cover art"><img src="${IMG.posterThumb+r.posterPath}" alt=""></button>`:""}<span data-open="${i}">${esc(r.title)}</span>${r.mediaType==="tv"?`<button class="ep-chip" data-eps="${i}">[S${String(se.s).padStart(2,"0")}E${String(se.e).padStart(2,"0")}]</button>`:""}</h2>
       <p>${esc(r.overview||"")}</p>
       <div class="cast-row">
@@ -1552,32 +1622,37 @@ function killAllTrailers(exceptI){
   });
 }
 function syncTrailers(){
-  const allow = !state.watching && (state.overlay==="none" || state.overlay==="synopsis") && !state.epPick;
+  const overlayOk = (state.overlay==="none" || state.overlay==="synopsis") && !state.epPick;
+  const allowPlay = !state.watching && overlayOk;
   const activeI = state.active;
   const r = state.items[activeI];
-  killAllTrailers(allow && r && r.trailerKey ? activeI : -1);
+  if (!state.watching) killAllTrailers(allowPlay && r && r.trailerKey ? activeI : -1);
   document.querySelectorAll(".slide").forEach(slide=>{
     const i = +slide.dataset.i;
     const item = state.items[i];
     const slot = slide.querySelector(".trailer-slot");
     if (!slot || !item) return;
-    const shouldPlay = allow && i===activeI && item.trailerKey && !state.paused[slideKey(item)];
+    const shouldPlay = allowPlay && i===activeI && item.trailerKey && !state.paused[slideKey(item)];
     const existing = slot.querySelector("iframe");
     if (shouldPlay) {
       if (!existing || existing.dataset.key!==item.trailerKey) {
-        slot.innerHTML = `<div class="trailer-cover"><iframe data-key="${item.trailerKey}" src="${ytEmbed(item.trailerKey, store.muted)}" allow="autoplay; encrypted-media; picture-in-picture" title="trailer"></iframe></div>`;
-        const cover = slot.querySelector(".trailer-cover");
-        setTimeout(()=>cover && cover.classList.add("ready"), 280);
+        slot.innerHTML = `<div class="trailer-cover ready"><iframe data-key="${item.trailerKey}" src="${ytEmbed(item.trailerKey, store.muted)}" allow="autoplay; encrypted-media; picture-in-picture" title="trailer"></iframe></div>`;
+        setTimeout(()=>ytSetRate(slot.querySelector("iframe"), 1.15), 400);
       } else {
         ytCommand("playVideo", existing);
         ytCommand(store.muted?"mute":"unMute", existing);
+        ytSetRate(existing, 1.15);
       }
       const img = slide.querySelector("img.bg");
       if (img && item.backdropPath && !img.src.includes("w1280")) img.src = IMG.backdropHd + item.backdropPath;
     } else if (existing) {
       ytCommand("pauseVideo", existing);
-      ytCommand("stopVideo", existing);
-      slot.innerHTML = "";
+      if (!state.watching || i!==activeI) {
+        if (!state.watching) {
+          ytCommand("stopVideo", existing);
+          slot.innerHTML = "";
+        }
+      }
     }
   });
 }
@@ -2018,7 +2093,7 @@ async function loadLane(id){
   render();
   try {
     const years = id === "popular"
-      ? [YEAR_NOW, YEAR_NOW, YEAR_NOW, YEAR_NOW, YEAR_NOW, YEAR_NOW]
+      ? [null]
       : state.yearFilter
         ? [state.yearFilter, state.yearFilter, state.yearFilter, state.yearFilter]
         : shuffle(ALL_YEARS.slice()).slice(0, 10);
@@ -2030,15 +2105,24 @@ async function loadLane(id){
     }
     const batches = await Promise.all(jobs);
     const seen = new Set();
-    const bag = shuffle(batches.flat());
-    // extra mix so the first cards are never the same stack
-    const salted = bag.map((r,i)=>({r, s: Math.random() + ((r.id||0)%97)/1000 + i*0.0001}));
-    salted.sort((a,b)=>a.s-b.s);
-    state.items = [];
-    for (const {r} of salted) {
-      const k=r.mediaType+r.id;
-      if (seen.has(k)) continue;
-      seen.add(k); state.items.push(r);
+    const bag = batches.flat();
+    if (id !== "popular") {
+      const salted = shuffle(bag).map((r,i)=>({r, s: Math.random() + ((r.id||0)%97)/1000 + i*0.0001}));
+      salted.sort((a,b)=>a.s-b.s);
+      state.items = [];
+      for (const {r} of salted) {
+        const k=r.mediaType+r.id;
+        if (seen.has(k)) continue;
+        seen.add(k); state.items.push(r);
+      }
+    } else {
+      bag.sort((a,b)=> (b.popularity||0)-(a.popularity||0));
+      state.items = [];
+      for (const r of bag) {
+        const k=r.mediaType+r.id;
+        if (seen.has(k)) continue;
+        seen.add(k); state.items.push(r);
+      }
     }
   } catch(e){ state.items=[]; }
   state.boot=false;
@@ -2050,7 +2134,7 @@ async function loadMore(){
   if (state.lane==="saved"||state.lane==="history"||state._more) return;
   state._more=true;
   try {
-    const y = state.lane === "popular" ? YEAR_NOW : (state.yearFilter || ALL_YEARS[Math.floor(Math.random()*ALL_YEARS.length)]);
+    const y = state.lane === "popular" ? null : (state.yearFilter || ALL_YEARS[Math.floor(Math.random()*ALL_YEARS.length)]);
     const next = await fetchLane(state.lane, y);
     const seen = new Set(state.items.map(x=>x.mediaType+x.id));
     const add = next.filter(x=>!seen.has(x.mediaType+x.id));
@@ -2148,6 +2232,7 @@ function openReelPreview(reel){
 function openWatch(reel){
   if(!reel) return;
   addHistory(reel);
+  ytCommand("pauseVideo");
   state.watching=reel; state.overlay="none"; state.epPick=null; state.moreOpen=false;
   if (reel.mediaType==="tv") {
     if (reel.lastSE) { state.watchS=reel.lastSE.s; state.watchE=reel.lastSE.e; }
