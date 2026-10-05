@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   build:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -32,6 +33,19 @@ jobs:
 
       - name: Make app icon
         run: python3 tools/make_icon.py
+
+      - name: Inject welcome and updater
+        run: python3 tools/inject_boot.py index.html
+
+      - name: Publish site icon and boot hook
+        run: |
+          git config user.name "BWHS Reels"
+          git config user.email "reels@users.noreply.github.com"
+          cp icons/icon-512.png icon-512.png
+          cp icons/icon-192.png icon-192.png
+          git add index.html icon-512.png icon-192.png
+          git diff --cached --quiet || git commit -m "Wire first-launch welcome [skip ci]"
+          git push
 
       - name: Install Dependencies
         run: npm install
