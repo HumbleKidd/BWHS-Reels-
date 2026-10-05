@@ -149,10 +149,16 @@ def main():
     open(os.path.join(xml_dir, "file_paths.xml"), "w", encoding="utf-8").write(PATHS)
     patch_manifest()
     icon = os.path.join(ROOT, "icons", "icon-512.png")
+    res = os.path.join(ANDROID, "app", "src", "main", "res")
+    for xml in glob.glob(os.path.join(res, "mipmap-anydpi-v26", "*.xml")):
+        os.remove(xml)
+        print("removed", xml)
     if os.path.exists(icon):
-        for folder in glob.glob(os.path.join(ANDROID, "app", "src", "main", "res", "mipmap-*")):
-            for name in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
-                shutil.copy(icon, os.path.join(folder, name))
+        for folder in glob.glob(os.path.join(res, "mipmap-*")):
+            if "anydpi" in folder:
+                continue
+            shutil.copy(icon, os.path.join(folder, "ic_launcher.png"))
+            shutil.copy(icon, os.path.join(folder, "ic_launcher_round.png"))
         print("icons copied")
 
 if __name__ == "__main__":
