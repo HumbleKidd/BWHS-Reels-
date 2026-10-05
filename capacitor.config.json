@@ -1,0 +1,11 @@
+{
+  "appId": "com.bwhs.reels",
+  "appName": "BWHS Reels",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
