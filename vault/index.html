@@ -189,6 +189,9 @@ button.ctl.on { background: var(--accent-brand); border-color: var(--accent-bran
     document.getElementById("vxMeta").textContent = (it.media === "tv" ? "Series" : "Film") + (it.year ? "  " + it.year : "");
     paint();
     tmdb("/" + it.media + "/" + it.id).then(function (d) {
+      state.current.title = d.title || d.name || state.current.title;
+      document.getElementById("vxTitle").textContent = state.current.title;
+      document.getElementById("vxMeta").textContent = (it.media === "tv" ? "Series" : "Film") + "  " + ((d.release_date || d.first_air_date || "").slice(0, 4));
       state.duration = ((d.runtime || (d.episode_run_time && d.episode_run_time[0]) || (it.media === "tv" ? 45 : 110)) * 60) || 5400;
       if (it.media === "tv") loadSeason(state.season);
       else document.getElementById("vxEps").innerHTML = "";
