@@ -473,30 +473,30 @@ const IMG = {
   logo: "https://image.tmdb.org/t/p/w300",
 };
 const SERVERS = {
+  twoembed: {
+    label: "2Embed",
+    movie: id => `https://www.2embed.cc/embed/${id}?autoplay=1`,
+    tv: (id,s=1,e=1) => `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}&autoplay=1`,
+  },
   vixsrc: {
     label: "VixSrc",
-    movie: id => `https://vixsrc.to/movie/${id}?autoplay=1`,
-    tv: (id,s=1,e=1) => `https://vixsrc.to/tv/${id}/${s}/${e}?autoplay=1`,
+    movie: id => `https://vixsrc.to/movie/${id}?autoplay=1&autoPlay=true&startAt=0&lang=en&primaryColor=4f46e5&secondaryColor=0f172a&skin=vixsrc&canPlayFHD=1&quality=2160&maxQuality=2160&res=2160`,
+    tv: (id,s=1,e=1) => `https://vixsrc.to/tv/${id}/${s}/${e}?autoplay=1&autoPlay=true&startAt=0&lang=en&primaryColor=4f46e5&secondaryColor=0f172a&skin=vixsrc&canPlayFHD=1&quality=2160&maxQuality=2160&res=2160`,
   },
-  videasy: {
-    label: "Videasy",
-    movie: id => `https://player.videasy.net/movie/${id}?autoplay=true&nextButton=false`,
-    tv: (id,s=1,e=1) => `https://player.videasy.net/tv/${id}/${s}/${e}?autoplay=true&nextButton=false`,
+  cinesrc: {
+    label: "CineSrc",
+    movie: id => `https://cinesrc.st/embed/movie/${id}?autoplay=true&muted=false&controls=true&autonext=true&autoskip=true&color=%230063e5&quality=1080`,
+    tv: (id,s=1,e=1) => `https://cinesrc.st/embed/tv/${id}?s=${s}&e=${e}&autoplay=true&muted=false&controls=true&autonext=true&autoskip=true&color=%230063e5&quality=1080`,
   },
-  vidlink: {
-    label: "VidLink",
-    movie: id => `https://vidlink.pro/movie/${id}?primaryColor=ece8e0&autoplay=true&next=1`,
-    tv: (id,s=1,e=1) => `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=ece8e0&autoplay=true&next=1`,
+  vidapi: {
+    label: "VidAPI",
+    movie: id => `https://vaplayer.ru/embed/movie/${id}?theme=disney&skin=disney&primaryColor=0063e5&color=0063e5&autoplay=1&lang=en&quality=1080`,
+    tv: (id,s=1,e=1) => `https://vaplayer.ru/embed/tv/${id}/${s}/${e}?theme=disney&skin=disney&primaryColor=0063e5&color=0063e5&autoplay=1&lang=en&quality=1080`,
   },
-  vidsrc: {
-    label: "VidSrc",
-    movie: id => `https://vidsrc.xyz/embed/movie?tmdb=${id}&autoplay=1`,
-    tv: (id,s=1,e=1) => `https://vidsrc.xyz/embed/tv?tmdb=${id}&season=${s}&episode=${e}&autoplay=1`,
-  },
-  vidcore: {
-    label: "VidCore",
-    movie: id => `https://vidcore.org/embed/movie/${id}?autoplay=true&theme=ece8e0`,
-    tv: (id,s=1,e=1) => `https://vidcore.org/embed/tv/${id}/${s}/${e}?autoplay=true&theme=ece8e0`,
+  vidrock: {
+    label: "Vidrock",
+    movie: id => `https://vidrock.net/movie/${id}?autoplay=1&lang=en&theme=disney&color=0063e5&quality=1080`,
+    tv: (id,s=1,e=1) => `https://vidrock.net/tv/${id}/${s}/${e}?autoplay=1&lang=en&theme=disney&color=0063e5&quality=1080`,
   },
 };
 const LANES = [
@@ -1042,7 +1042,12 @@ const state = {
   watching: null,
   watchS: 1,
   watchE: 1,
-  server: ({vix:"vixsrc", videasy:"videasy", vixsrc:"vixsrc", vidlink:"vidlink", vidsrc:"vidsrc", vidcore:"vidcore"}[localStorage.getItem("bwhs-server")] || "vixsrc"),
+  server: (() => {
+    const saved = localStorage.getItem("bwhs-server");
+    const map = {vix:"vixsrc", videasy:"videasy", vixsrc:"vixsrc", vidlink:"vidlink", vidsrc:"vidsrc", vidcore:"vidcore", twoembed:"twoembed", cinesrc:"cinesrc", vidapi:"vidapi", vidrock:"vidrock"};
+    const mapped = map[saved];
+    return (mapped && SERVERS[mapped]) ? mapped : "twoembed";
+  })(),
   serverOpen: false,
   epPick: null,
   seasons: {},
@@ -1499,7 +1504,7 @@ let failoverHops = 0;
 let failoverOrigin = null;
 
 function playSrc(r, server){
-  const s = SERVERS[server || state.server] || SERVERS.vixsrc;
+  const s = SERVERS[server || state.server] || SERVERS.twoembed;
   return r.mediaType==="tv" ? s.tv(r.id, state.watchS, state.watchE) : s.movie(r.id);
 }
 function showToast(msg){
@@ -1561,7 +1566,7 @@ function autoFailoverPlayer(){
   state.server = keys[next];
   localStorage.setItem("bwhs-server", state.server);
   const toggle = document.getElementById("svrToggle");
-  if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.vixsrc).label + " ▾";
+  if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.twoembed).label + " ▾";
   document.querySelectorAll("[data-server]").forEach(x=>x.classList.toggle("on", x.dataset.server===state.server));
   showToast("Switching source to " + (SERVERS[state.server]||{}).label);
   loadPlayerStream();
@@ -1573,7 +1578,7 @@ function playerHTML(r){
       <button class="icon-btn" id="closePlayer">${icon("x")}</button>
       <strong>${esc(r.title)}${seLabel}</strong>
       <div class="svr-wrap ${state.serverOpen?"open":""}" id="svrWrap">
-        <button class="svr-toggle" id="svrToggle">${(SERVERS[state.server]||SERVERS.vixsrc).label} ▾</button>
+        <button class="svr-toggle" id="svrToggle">${(SERVERS[state.server]||SERVERS.twoembed).label} ▾</button>
         <div class="svr-fly">
           ${Object.entries(SERVERS).map(([k,v])=>`<button data-server="${k}" class="${state.server===k?"on":""}">${v.label}</button>`).join("")}
         </div>
@@ -1970,8 +1975,18 @@ function bind(){
     failoverHops=0;
     failoverOrigin=null;
     exitCinemaFs();
-    render();
-    requestAnimationFrame(()=>syncTrailers());
+    document.getElementById("cinema")?.remove();
+    // Resume the existing trailer iframe from where it was paused (do not rebuild the feed)
+    requestAnimationFrame(() => {
+      const slide = document.querySelector(".slide.active");
+      const frame = slide && slide.querySelector(".trailer-cover iframe");
+      if (frame) {
+        ytCommand("playVideo", frame);
+        ytCommand(store.muted ? "mute" : "unMute", frame);
+      } else {
+        syncTrailers();
+      }
+    });
   });
   $("#fsPlayer")?.addEventListener("click", ()=>toggleCinemaFs());
   $("#svrToggle")?.addEventListener("click", e=>{
@@ -2322,6 +2337,13 @@ function openReelPreview(reel){
 function openWatch(reel){
   if(!reel) return;
   addHistory(reel);
+  // Pause + mute active trailer immediately so it doesn't bleed audio behind the player
+  const activeSlide = document.querySelector(".slide.active");
+  const trailerFrame = activeSlide && activeSlide.querySelector(".trailer-cover iframe");
+  if (trailerFrame) {
+    ytCommand("pauseVideo", trailerFrame);
+    ytCommand("mute", trailerFrame);
+  }
   ytCommand("pauseVideo");
   state.watching=reel; state.overlay="none"; state.epPick=null; state.moreOpen=false;
   if (reel.mediaType==="tv") {
@@ -2349,8 +2371,18 @@ function openWatch(reel){
     failoverHops=0;
     failoverOrigin=null;
     exitCinemaFs();
-    render();
-    requestAnimationFrame(()=>syncTrailers());
+    document.getElementById("cinema")?.remove();
+    // Resume the existing trailer iframe from where it was paused (do not rebuild the feed)
+    requestAnimationFrame(() => {
+      const slide = document.querySelector(".slide.active");
+      const frame = slide && slide.querySelector(".trailer-cover iframe");
+      if (frame) {
+        ytCommand("playVideo", frame);
+        ytCommand(store.muted ? "mute" : "unMute", frame);
+      } else {
+        syncTrailers();
+      }
+    });
   });
   $("#fsPlayer")?.addEventListener("click", ()=>toggleCinemaFs());
   $("#svrToggle")?.addEventListener("click", e=>{
@@ -2368,7 +2400,7 @@ function openWatch(reel){
     localStorage.setItem("bwhs-server", state.server);
     loadPlayerStream(true);
     const toggle = document.getElementById("svrToggle");
-    if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.vixsrc).label + " ▾";
+    if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.twoembed).label + " ▾";
     document.querySelectorAll("[data-server]").forEach(x=>x.classList.toggle("on", x.dataset.server===state.server));
   }));
   $("#playerEps")?.addEventListener("click", ()=> state.watching && openEpisodes(state.watching));
