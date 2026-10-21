@@ -390,21 +390,17 @@ body.player-open .player { z-index: 100; }
 }
 .svr-menu button { height:34px; border-radius:10px; text-align:left; padding:0 10px; font-size:12px; font-weight:600; }
 .svr-menu button.on { background:var(--accent); color:var(--accent-fg); }
-.svr-fly {
-  display:none; overflow:hidden; max-width:0; opacity:0;
-  transition: max-width .28s ease, opacity .2s ease, margin .28s ease;
-  margin-left:0;
+.svr-menu {
+  display: none;
+  position: absolute; top: 40px; right: 0; z-index: 20;
+  min-width: 160px; background: color-mix(in oklab, var(--surface) 98%, transparent);
+  border: 1px solid var(--line); border-radius: 14px; padding: 8px; backdrop-filter: blur(16px);
+  flex-direction: column; gap: 4px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
 }
-.svr-wrap.open .svr-fly {
-  display:flex; gap:6px; max-width:520px; opacity:1; margin-left:8px;
-}
-.svr-fly button {
-  height:32px; padding:0 10px; border-radius:999px; border:1px solid var(--line);
-  background:var(--elevated); font-size:11px; font-weight:600; white-space:nowrap;
-}
-.svr-fly button.on { background:var(--accent); color:var(--accent-fg); border-color:transparent; }
+.svr-wrap.open .svr-menu { display: flex; }
+.svr-fly { display: none !important; }
 @media (max-width: 819px) {
-  .svr-fly { display:none !important; }
   header.top { padding-left:10px; padding-right:10px; }
   .lanes { gap:5px; }
   .meta h2 { font-size: clamp(1.45rem, 7vw, 2rem); }
@@ -479,15 +475,15 @@ const IMG = {
   logo: "https://image.tmdb.org/t/p/w300",
 };
 const SERVERS = {
-  twoembed: {
-    label: "2Embed",
-    movie: id => `https://www.2embed.cc/embed/${id}?autoplay=1`,
-    tv: (id,s=1,e=1) => `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}&autoplay=1`,
-  },
   vixsrc: {
     label: "VixSrc",
     movie: id => `https://vixsrc.to/movie/${id}?autoplay=1&autoPlay=true&startAt=0&lang=en&primaryColor=4f46e5&secondaryColor=0f172a&skin=vixsrc&canPlayFHD=1&quality=2160&maxQuality=2160&res=2160`,
     tv: (id,s=1,e=1) => `https://vixsrc.to/tv/${id}/${s}/${e}?autoplay=1&autoPlay=true&startAt=0&lang=en&primaryColor=4f46e5&secondaryColor=0f172a&skin=vixsrc&canPlayFHD=1&quality=2160&maxQuality=2160&res=2160`,
+  },
+  twoembed: {
+    label: "2Embed",
+    movie: id => `https://www.2embed.cc/embed/${id}?autoplay=1`,
+    tv: (id,s=1,e=1) => `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}&autoplay=1`,
   },
   cinesrc: {
     label: "CineSrc",
@@ -1052,7 +1048,7 @@ const state = {
     const saved = localStorage.getItem("bwhs-server");
     const map = {vix:"vixsrc", videasy:"videasy", vixsrc:"vixsrc", vidlink:"vidlink", vidsrc:"vidsrc", vidcore:"vidcore", twoembed:"twoembed", cinesrc:"cinesrc", vidapi:"vidapi", vidrock:"vidrock"};
     const mapped = map[saved];
-    return (mapped && SERVERS[mapped]) ? mapped : "twoembed";
+    return (mapped && SERVERS[mapped]) ? mapped : "vixsrc";
   })(),
   serverOpen: false,
   epPick: null,
@@ -1167,7 +1163,10 @@ function render(){
   bind();
   pushAppHash();
   if (state.watching) requestAnimationFrame(()=>loadPlayerStream());
-  else if (!state.posterView) requestAnimationFrame(()=>syncTrailers());
+  else if (!state.posterView) {
+    requestAnimationFrame(()=>syncTrailers());
+    setTimeout(()=>syncTrailers(), 300);
+  }
 }
 
 function logoSVG(){
@@ -1510,7 +1509,7 @@ let failoverHops = 0;
 let failoverOrigin = null;
 
 function playSrc(r, server){
-  const s = SERVERS[server || state.server] || SERVERS.twoembed;
+  const s = SERVERS[server || state.server] || SERVERS.vixsrc;
   return r.mediaType==="tv" ? s.tv(r.id, state.watchS, state.watchE) : s.movie(r.id);
 }
 function showToast(msg){
@@ -1572,7 +1571,7 @@ function autoFailoverPlayer(){
   state.server = keys[next];
   localStorage.setItem("bwhs-server", state.server);
   const toggle = document.getElementById("svrToggle");
-  if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.twoembed).label + " ▾";
+  if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.vixsrc).label + " ▾";
   document.querySelectorAll("[data-server]").forEach(x=>x.classList.toggle("on", x.dataset.server===state.server));
   showToast("Switching source to " + (SERVERS[state.server]||{}).label);
   loadPlayerStream();
@@ -1584,7 +1583,7 @@ function playerHTML(r){
       <button class="icon-btn" id="closePlayer">${icon("x")}</button>
       <strong>${esc(r.title)}${seLabel}</strong>
       <div class="svr-wrap ${state.serverOpen?"open":""}" id="svrWrap">
-        <button class="svr-toggle" id="svrToggle">${(SERVERS[state.server]||SERVERS.twoembed).label} ▾</button>
+        <button class="svr-toggle" id="svrToggle">${(SERVERS[state.server]||SERVERS.vixsrc).label} ▾</button>
         <div class="svr-fly">
           ${Object.entries(SERVERS).map(([k,v])=>`<button data-server="${k}" class="${state.server===k?"on":""}">${v.label}</button>`).join("")}
         </div>
@@ -1825,8 +1824,17 @@ async function exitCinemaFs(){
 function toggleCinemaFs(){
   const el = document.getElementById("cinema");
   if (!el) return;
-  if (fsEl()) exitCinemaFs();
-  else enterLandscape(el);
+  if (fsEl()) {
+    exitCinemaFs();
+  } else {
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (req) {
+      req.call(el).catch(() => {
+        document.documentElement.requestFullscreen?.().catch(()=>{});
+      });
+    }
+    try { screen.orientation?.lock?.("landscape").catch(()=>{}); } catch {}
+  }
 }
 
 function closeEpSheet(then){
@@ -1992,7 +2000,7 @@ function bind(){
     if (state.watching) {
       loadPlayerStream(true);
       const toggle = document.getElementById("svrToggle");
-      if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.twoembed).label + " ▾";
+      if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.vixsrc).label + " ▾";
       document.querySelectorAll("[data-server]").forEach(x=>x.classList.toggle("on", x.dataset.server===state.server));
       const wrap = $("#svrWrap");
       if (wrap) wrap.classList.remove("open");
@@ -2396,7 +2404,7 @@ function openWatch(reel){
     localStorage.setItem("bwhs-server", state.server);
     loadPlayerStream(true);
     const toggle = document.getElementById("svrToggle");
-    if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.twoembed).label + " ▾";
+    if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.vixsrc).label + " ▾";
     document.querySelectorAll("[data-server]").forEach(x=>x.classList.toggle("on", x.dataset.server===state.server));
     const wrap = document.getElementById("svrWrap");
     if (wrap) wrap.classList.remove("open");
