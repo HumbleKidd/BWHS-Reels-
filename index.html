@@ -330,6 +330,12 @@ header.top > * { pointer-events:auto; }
 }
 
 .player { position:absolute; inset:0; z-index:50; background:#000; display:flex; flex-direction:column; }
+body.player-open .feed,
+body.player-open header.top,
+body.player-open .rail,
+body.player-open .meta { display: none !important; }
+body.player-open .player { z-index: 100; }
+
 .player iframe { flex:1; width:100%; border:0; background:#000; }
 .player-bar { display:flex; align-items:center; gap:8px; padding: max(8px, env(safe-area-inset-top)) 10px 10px; background:#000; flex-wrap:wrap; }
 .player-bar strong { flex:1; min-width:0; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -1968,26 +1974,7 @@ function bind(){
   $("#setBtn")?.addEventListener("click", ()=>{ state.overlay="settings"; render(); });
   $("#libBtn")?.addEventListener("click", ()=>{ state.overlay="library"; state.libTab="saved"; render(); });
   $("#closeOv")?.addEventListener("click", ()=>{ state.overlay="none"; state.synopsis=null; render(); });
-  $("#closePlayer")?.addEventListener("click", ()=>{
-    state.watching=null;
-    clearFailover();
-    playerReady=false;
-    failoverHops=0;
-    failoverOrigin=null;
-    exitCinemaFs();
-    document.getElementById("cinema")?.remove();
-    // Resume the existing trailer iframe from where it was paused (do not rebuild the feed)
-    requestAnimationFrame(() => {
-      const slide = document.querySelector(".slide.active");
-      const frame = slide && slide.querySelector(".trailer-cover iframe");
-      if (frame) {
-        ytCommand("playVideo", frame);
-        ytCommand(store.muted ? "mute" : "unMute", frame);
-      } else {
-        syncTrailers();
-      }
-    });
-  });
+  $("#closePlayer")?.addEventListener("click", ()=> closeWatch(false));
   $("#fsPlayer")?.addEventListener("click", ()=>toggleCinemaFs());
   $("#svrToggle")?.addEventListener("click", e=>{
     e.stopPropagation();
@@ -2334,21 +2321,32 @@ function openReelPreview(reel){
   if (feed) feed.scrollTop = idx * (feed.clientHeight || window.innerHeight);
   hydrateAround(idx);
 }
+function stopAllTrailers(){
+  document.querySelectorAll(".trailer-cover iframe").forEach(f => {
+    try { ytCommand("pauseVideo", f); ytCommand("mute", f); } catch(e){}
+    try { f.src = "about:blank"; } catch(e){}
+  });
+}
+function closeWatch(fromHistory){
+  if (!state.watching) return;
+  state.watching = null;
+  clearFailover();
+  playerReady = false;
+  failoverHops = 0;
+  failoverOrigin = null;
+  exitCinemaFs();
+  document.getElementById("cinema")?.remove();
+  document.body.classList.remove("player-open");
+  if (!fromHistory) {
+    const homeHash = routeHash();
+    history.replaceState({app:true}, "", homeHash);
+  }
+  requestAnimationFrame(() => syncTrailers());
+}
 function openWatch(reel){
   if(!reel) return;
   addHistory(reel);
-  // Force-pause and mute ALL trailers so nothing continues behind the player
-  function forcePauseTrailers() {
-    document.querySelectorAll(".trailer-cover iframe").forEach(f => {
-      ytCommand("pauseVideo", f);
-      ytCommand("mute", f);
-      try { f.contentWindow?.postMessage(JSON.stringify({event:"command",func:"pauseVideo",args:[]}),"*"); } catch(e){}
-    });
-  }
-  forcePauseTrailers();
-  setTimeout(forcePauseTrailers, 100);
-  setTimeout(forcePauseTrailers, 400);
-  setTimeout(forcePauseTrailers, 800);
+  stopAllTrailers();
   state.watching=reel; state.overlay="none"; state.epPick=null; state.moreOpen=false;
   if (reel.mediaType==="tv") {
     if (reel.lastSE) { state.watchS=reel.lastSE.s; state.watchE=reel.lastSE.e; }
@@ -2358,6 +2356,9 @@ function openWatch(reel){
   failoverOrigin = SERVER_ORDER.indexOf(state.server);
   lastStreamKey = streamKey();
   document.getElementById("cinema")?.remove();
+  document.body.classList.add("player-open");
+  const watchHash = routeHash();
+  history.pushState({app:true, watch:true}, "", watchHash);
   app.insertAdjacentHTML("beforeend", playerHTML(reel));
   const cinema = document.getElementById("cinema");
   const frame = cinema && cinema.querySelector("iframe");
@@ -2368,26 +2369,7 @@ function openWatch(reel){
     frame.setAttribute("referrerpolicy", "origin");
     if (!frame.src) frame.src = playSrc(reel);
   }
-  $("#closePlayer")?.addEventListener("click", ()=>{
-    state.watching=null;
-    clearFailover();
-    playerReady=false;
-    failoverHops=0;
-    failoverOrigin=null;
-    exitCinemaFs();
-    document.getElementById("cinema")?.remove();
-    // Resume the existing trailer iframe from where it was paused (do not rebuild the feed)
-    requestAnimationFrame(() => {
-      const slide = document.querySelector(".slide.active");
-      const frame = slide && slide.querySelector(".trailer-cover iframe");
-      if (frame) {
-        ytCommand("playVideo", frame);
-        ytCommand(store.muted ? "mute" : "unMute", frame);
-      } else {
-        syncTrailers();
-      }
-    });
-  });
+  $("#closePlayer")?.addEventListener("click", ()=> closeWatch(false));
   $("#fsPlayer")?.addEventListener("click", ()=>toggleCinemaFs());
   $("#svrToggle")?.addEventListener("click", e=>{
     e.stopPropagation();
@@ -2618,6 +2600,13 @@ loadLane("popular");
   }, true);
 })();
 </script>
+
+
+window.addEventListener("popstate", function(){
+  if (state.watching) {
+    closeWatch(true);
+  }
+});
 
 <script src="reels-boot.js"></script>
 </body>
