@@ -382,23 +382,16 @@ body.player-open .player { z-index: 100; }
   display:flex; align-items:center; gap:6px; white-space:nowrap;
 }
 .svr-menu {
-  position:absolute; top:38px; right:0; z-index:8;
-  min-width:148px; background: color-mix(in oklab, var(--surface) 96%, transparent);
-  border:1px solid var(--line); border-radius:14px; padding:8px; backdrop-filter:blur(16px);
-  display:flex; flex-direction:column; gap:4px;
-  box-shadow: 0 16px 40px rgba(0,0,0,.4);
-}
-.svr-menu button { height:34px; border-radius:10px; text-align:left; padding:0 10px; font-size:12px; font-weight:600; }
-.svr-menu button.on { background:var(--accent); color:var(--accent-fg); }
-.svr-menu {
   display: none;
-  position: absolute; top: 40px; right: 0; z-index: 20;
-  min-width: 160px; background: color-mix(in oklab, var(--surface) 98%, transparent);
+  position: absolute; top: 42px; right: 0; z-index: 30;
+  min-width: 170px; background: color-mix(in oklab, var(--surface) 98%, transparent);
   border: 1px solid var(--line); border-radius: 14px; padding: 8px; backdrop-filter: blur(16px);
   flex-direction: column; gap: 4px;
   box-shadow: 0 16px 40px rgba(0,0,0,.45);
 }
-.svr-wrap.open .svr-menu { display: flex; }
+.svr-wrap.open .svr-menu { display: flex !important; }
+.svr-menu button { height:36px; border-radius:10px; text-align:left; padding:0 12px; font-size:13px; font-weight:600; }
+.svr-menu button.on { background:var(--accent); color:var(--accent-fg); }
 .svr-fly { display: none !important; }
 @media (max-width: 819px) {
   header.top { padding-left:10px; padding-right:10px; }
@@ -408,9 +401,6 @@ body.player-open .player { z-index: 100; }
   .play, .rbtn i, .studio .mark { width:40px; height:40px; }
   .cast { width:52px; }
   .cast img, .cast .ph { width:42px; height:42px; }
-}
-@media (min-width: 820px) {
-  .svr-menu { display:none !important; }
 }
 .player:fullscreen,
 .player:-webkit-full-screen {
@@ -1582,19 +1572,17 @@ function playerHTML(r){
     <div class="player-bar">
       <button class="icon-btn" id="closePlayer">${icon("x")}</button>
       <strong>${esc(r.title)}${seLabel}</strong>
-      <div class="svr-wrap ${state.serverOpen?"open":""}" id="svrWrap">
+      <div class="svr-wrap" id="svrWrap">
         <button class="svr-toggle" id="svrToggle">${(SERVERS[state.server]||SERVERS.vixsrc).label} ▾</button>
-        <div class="svr-fly">
+        <div class="svr-menu" id="svrMenu">
           ${Object.entries(SERVERS).map(([k,v])=>`<button data-server="${k}" class="${state.server===k?"on":""}">${v.label}</button>`).join("")}
         </div>
-        ${state.serverOpen ? `<div class="svr-menu" id="svrMenu">
-          ${Object.entries(SERVERS).map(([k,v])=>`<button data-server="${k}" class="${state.server===k?"on":""}">${v.label}</button>`).join("")}
-        </div>` : ""}
       </div>
       ${r.mediaType==="tv"?`<button class="ep-chip" id="playerEps">Episodes</button>`:""}
       <button class="icon-btn" id="fsPlayer" aria-label="Fullscreen">${icon("expand")}</button>
     </div>
     <iframe src="${playSrc(r)}" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin"></iframe>
+    <button class="icon-btn player-fs-btn" id="fsPlayerBottom" aria-label="Fullscreen" style="position:absolute; bottom:16px; right:16px; z-index:10; background:rgba(0,0,0,.6);">${icon("expand")}</button>
   </div>`;
 }
 function epsHTML(reel){
@@ -1984,6 +1972,7 @@ function bind(){
   $("#closeOv")?.addEventListener("click", ()=>{ state.overlay="none"; state.synopsis=null; render(); });
   $("#closePlayer")?.addEventListener("click", ()=> closeWatch(false));
   $("#fsPlayer")?.addEventListener("click", ()=>toggleCinemaFs());
+  $("#fsPlayerBottom")?.addEventListener("click", ()=>toggleCinemaFs());
   $("#svrToggle")?.addEventListener("click", e=>{
     e.stopPropagation();
     state.serverOpen = !state.serverOpen;
@@ -2388,6 +2377,7 @@ function openWatch(reel){
   }
   $("#closePlayer")?.addEventListener("click", ()=> closeWatch(false));
   $("#fsPlayer")?.addEventListener("click", ()=>toggleCinemaFs());
+  $("#fsPlayerBottom")?.addEventListener("click", ()=>toggleCinemaFs());
   $("#svrToggle")?.addEventListener("click", e=>{
     e.stopPropagation();
     state.serverOpen = !state.serverOpen;
