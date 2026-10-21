@@ -1538,7 +1538,7 @@ function loadPlayerStream(force){
   frame.removeAttribute("sandbox");
   frame.setAttribute("allow", "autoplay; fullscreen; encrypted-media; picture-in-picture");
   frame.setAttribute("allowfullscreen", "true");
-  frame.setAttribute("referrerpolicy", "no-referrer");
+  frame.setAttribute("referrerpolicy", "origin");
   const markReady = () => {
     playerReady = true;
     clearFailover();
@@ -1589,7 +1589,7 @@ function playerHTML(r){
       ${r.mediaType==="tv"?`<button class="ep-chip" id="playerEps">Episodes</button>`:""}
       <button class="icon-btn" id="fsPlayer" aria-label="Fullscreen">${icon("expand")}</button>
     </div>
-    <iframe src="${playSrc(r)}" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="no-referrer"></iframe>
+    <iframe src="${playSrc(r)}" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin"></iframe>
   </div>`;
 }
 function epsHTML(reel){
@@ -2337,14 +2337,18 @@ function openReelPreview(reel){
 function openWatch(reel){
   if(!reel) return;
   addHistory(reel);
-  // Pause + mute active trailer immediately so it doesn't bleed audio behind the player
-  const activeSlide = document.querySelector(".slide.active");
-  const trailerFrame = activeSlide && activeSlide.querySelector(".trailer-cover iframe");
-  if (trailerFrame) {
-    ytCommand("pauseVideo", trailerFrame);
-    ytCommand("mute", trailerFrame);
+  // Force-pause and mute ALL trailers so nothing continues behind the player
+  function forcePauseTrailers() {
+    document.querySelectorAll(".trailer-cover iframe").forEach(f => {
+      ytCommand("pauseVideo", f);
+      ytCommand("mute", f);
+      try { f.contentWindow?.postMessage(JSON.stringify({event:"command",func:"pauseVideo",args:[]}),"*"); } catch(e){}
+    });
   }
-  ytCommand("pauseVideo");
+  forcePauseTrailers();
+  setTimeout(forcePauseTrailers, 100);
+  setTimeout(forcePauseTrailers, 400);
+  setTimeout(forcePauseTrailers, 800);
   state.watching=reel; state.overlay="none"; state.epPick=null; state.moreOpen=false;
   if (reel.mediaType==="tv") {
     if (reel.lastSE) { state.watchS=reel.lastSE.s; state.watchE=reel.lastSE.e; }
@@ -2361,7 +2365,7 @@ function openWatch(reel){
     frame.removeAttribute("sandbox");
     frame.setAttribute("allow", "autoplay; fullscreen; encrypted-media; picture-in-picture");
     frame.setAttribute("allowfullscreen", "true");
-    frame.setAttribute("referrerpolicy", "no-referrer");
+    frame.setAttribute("referrerpolicy", "origin");
     if (!frame.src) frame.src = playSrc(reel);
   }
   $("#closePlayer")?.addEventListener("click", ()=>{
