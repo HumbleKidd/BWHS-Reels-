@@ -1981,7 +1981,7 @@ function bind(){
     state.serverOpen = !state.serverOpen;
     const wrap = $("#svrWrap");
     if (wrap) wrap.classList.toggle("open", state.serverOpen);
-    if (isPhone()) render();
+    if (isPhone() && !state.watching) render();
   });
   document.querySelectorAll("[data-server]").forEach(b=>b.addEventListener("click", ()=>{
     state.server = b.dataset.server;
@@ -1989,7 +1989,16 @@ function bind(){
     failoverHops = 0;
     failoverOrigin = SERVER_ORDER.indexOf(state.server);
     localStorage.setItem("bwhs-server", state.server);
-    render();
+    if (state.watching) {
+      loadPlayerStream(true);
+      const toggle = document.getElementById("svrToggle");
+      if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.twoembed).label + " ▾";
+      document.querySelectorAll("[data-server]").forEach(x=>x.classList.toggle("on", x.dataset.server===state.server));
+      const wrap = $("#svrWrap");
+      if (wrap) wrap.classList.remove("open");
+    } else {
+      render();
+    }
   }));
   document.querySelectorAll("[data-eps]").forEach(b=>b.addEventListener("click", e=>{
     e.stopPropagation();
@@ -2376,9 +2385,10 @@ function openWatch(reel){
     state.serverOpen = !state.serverOpen;
     const wrap = $("#svrWrap");
     if (wrap) wrap.classList.toggle("open", state.serverOpen);
-    if (isPhone()) render();
+    if (isPhone() && !state.watching) render();
   });
-  document.querySelectorAll("#cinema [data-server]").forEach(b=>b.addEventListener("click", ()=>{
+  document.querySelectorAll("#cinema [data-server]").forEach(b=>b.addEventListener("click", (e)=>{
+    e.stopPropagation();
     state.server = b.dataset.server;
     state.serverOpen = false;
     failoverHops = 0;
@@ -2388,6 +2398,8 @@ function openWatch(reel){
     const toggle = document.getElementById("svrToggle");
     if (toggle) toggle.textContent = (SERVERS[state.server]||SERVERS.twoembed).label + " ▾";
     document.querySelectorAll("[data-server]").forEach(x=>x.classList.toggle("on", x.dataset.server===state.server));
+    const wrap = document.getElementById("svrWrap");
+    if (wrap) wrap.classList.remove("open");
   }));
   $("#playerEps")?.addEventListener("click", ()=> state.watching && openEpisodes(state.watching));
   pushAppHash();
